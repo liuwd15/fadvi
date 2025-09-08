@@ -1,0 +1,13 @@
+# FADVI Package
+
+include README.md
+include LICENSE
+include requirements.txt
+include pyproject.toml
+recursive-include src *.py
+recursive-include test *.py
+exclude test/train.h5ad
+exclude test/*.h5ad
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
