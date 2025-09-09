@@ -4,15 +4,13 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn.functional as F
-from torch.distributions import Normal
-from torch.distributions import kl_divergence as kl
-
 from scvi import REGISTRY_KEYS
-from scvi.module.base import LossOutput, SupervisedModuleClass
-from scvi.nn import Encoder
-
 from scvi.module._classifier import Classifier
 from scvi.module._vae import VAE
+from scvi.module.base import LossOutput, SupervisedModuleClass
+from scvi.nn import Encoder
+from torch.distributions import Normal
+from torch.distributions import kl_divergence as kl
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -41,10 +39,10 @@ def gradient_reversal(x, alpha=1.0):
 
 class FADVAE(SupervisedModuleClass, VAE):
     """Factor Disentanglement Variational Autoencoder.
-    
-    This model disentangles batch-related variation (z_b), label-related variation (z_l), 
+
+    This model disentangles batch-related variation (z_b), label-related variation (z_l),
     and residual variation (z_r) using adversarial training and cross-correlation penalties.
-    
+
     Parameters
     ----------
     n_input
@@ -133,7 +131,7 @@ class FADVAE(SupervisedModuleClass, VAE):
     ):
         # Calculate total latent dimension for VAE parent
         n_latent_total = n_latent_b + n_latent_l + n_latent_r
-        
+
         super().__init__(
             n_input,
             n_hidden=n_hidden,
@@ -159,7 +157,7 @@ class FADVAE(SupervisedModuleClass, VAE):
         self.n_labels = n_labels
         self.n_cats_per_cov = n_cats_per_cov
         self._unlabeled_category_id = unlabeled_category_id
-        
+
         # Store loss weights
         self.beta = beta
         self.lambda_b = lambda_b
@@ -188,7 +186,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             return_dist=True,
         )
-        
+
         self.encoder_l = Encoder(
             n_input,
             n_latent_l,
@@ -200,7 +198,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             return_dist=True,
         )
-        
+
         self.encoder_r = Encoder(
             n_input,
             n_latent_r,
@@ -224,7 +222,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             logits=True,
         )
-        
+
         self.head_label = Classifier(
             n_latent_l,
             n_labels=n_labels,
@@ -247,7 +245,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             logits=True,
         )
-        
+
         self.adv_head_label_from_b = Classifier(
             n_latent_b,
             n_labels=n_labels,
@@ -258,7 +256,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             logits=True,
         )
-        
+
         self.adv_head_batch_from_r = Classifier(
             n_latent_r,
             n_labels=n_batch,
@@ -269,7 +267,7 @@ class FADVAE(SupervisedModuleClass, VAE):
             use_layer_norm=use_layer_norm_encoder,
             logits=True,
         )
-        
+
         self.adv_head_label_from_r = Classifier(
             n_latent_r,
             n_labels=n_labels,
@@ -284,50 +282,52 @@ class FADVAE(SupervisedModuleClass, VAE):
     def _get_inference_input(self, tensors):
         """Get input for inference."""
         x = tensors[REGISTRY_KEYS.X_KEY]
-        
+
         input_dict = {"x": x}
-        
+
         # Add batch index if present
         if REGISTRY_KEYS.BATCH_KEY in tensors.keys():
             input_dict.update({"batch_index": tensors[REGISTRY_KEYS.BATCH_KEY]})
-        
+
         # Add categorical covariates if present
         if REGISTRY_KEYS.CAT_COVS_KEY in tensors.keys():
             input_dict.update({"cat_covs": tensors[REGISTRY_KEYS.CAT_COVS_KEY]})
-        
+
         # Add continuous covariates if present
         if REGISTRY_KEYS.CONT_COVS_KEY in tensors.keys():
             input_dict.update({"cont_covs": tensors[REGISTRY_KEYS.CONT_COVS_KEY]})
-            
+
         return input_dict
 
     def _get_generative_input(self, tensors, inference_outputs):
         """Get input for generative model."""
         z_b = inference_outputs["z_b"]
-        z_l = inference_outputs["z_l"] 
+        z_l = inference_outputs["z_l"]
         z_r = inference_outputs["z_r"]
         library = inference_outputs["library"]
-        
+
         # Concatenate all latent factors
         z = torch.cat([z_b, z_l, z_r], dim=-1)
-        
+
         input_dict = {"z": z, "library": library}
-        
+
         # Add batch information if present
         if REGISTRY_KEYS.BATCH_KEY in tensors.keys():
             input_dict.update({"batch_index": tensors[REGISTRY_KEYS.BATCH_KEY]})
-            
+
         # Add categorical covariates if present
         if REGISTRY_KEYS.CAT_COVS_KEY in tensors.keys():
             input_dict.update({"cat_covs": tensors[REGISTRY_KEYS.CAT_COVS_KEY]})
-            
+
         # Add continuous covariates if present
         if REGISTRY_KEYS.CONT_COVS_KEY in tensors.keys():
             input_dict.update({"cont_covs": tensors[REGISTRY_KEYS.CONT_COVS_KEY]})
-            
+
         return input_dict
 
-    def inference(self, x, batch_index=None, cat_covs=None, cont_covs=None, n_samples=1):
+    def inference(
+        self, x, batch_index=None, cat_covs=None, cont_covs=None, n_samples=1
+    ):
         """Run inference to get latent representations."""
         # Prepare input
         x_ = x
@@ -336,21 +336,27 @@ class FADVAE(SupervisedModuleClass, VAE):
 
         # Ensure all tensors are on the same device as x
         device = x.device
-        
+
         # Move batch_index to correct device if provided
         if batch_index is not None:
             batch_index = batch_index.to(device)
-            
+
         # Move categorical covariates to correct device if provided
         if cat_covs is not None:
-            cat_covs = [cov.to(device) if isinstance(cov, torch.Tensor) else cov for cov in cat_covs]
+            cat_covs = [
+                cov.to(device) if isinstance(cov, torch.Tensor) else cov
+                for cov in cat_covs
+            ]
             categorical_input = tuple(cat_covs)
         else:
             categorical_input = ()
-            
-        # Move continuous covariates to correct device if provided  
+
+        # Move continuous covariates to correct device if provided
         if cont_covs is not None:
-            cont_covs = [cov.to(device) if isinstance(cov, torch.Tensor) else cov for cov in cont_covs]
+            cont_covs = [
+                cov.to(device) if isinstance(cov, torch.Tensor) else cov
+                for cov in cont_covs
+            ]
 
         # Encode to separate latent factors
         qb, z_b = self.encoder_b(x_, batch_index, *categorical_input)
@@ -365,7 +371,9 @@ class FADVAE(SupervisedModuleClass, VAE):
 
         # Library size encoding (from parent VAE)
         if not self.use_observed_lib_size:
-            ql_lib, library_encoded = self.l_encoder(x_, batch_index, *categorical_input)
+            ql_lib, library_encoded = self.l_encoder(
+                x_, batch_index, *categorical_input
+            )
             if n_samples > 1:
                 library = ql_lib.rsample((n_samples,))
             else:
@@ -383,33 +391,39 @@ class FADVAE(SupervisedModuleClass, VAE):
             "qr": qr,
             "library": library,
         }
-        
+
         if not self.use_observed_lib_size:
             outputs["ql_lib"] = ql_lib
-            
+
         return outputs
 
     def generative(self, z, library, batch_index=None, cat_covs=None, cont_covs=None):
         """Run generative model to reconstruct data."""
         # Ensure all tensors are on the same device as z
         device = z.device
-        
+
         # Move library to correct device
         if library is not None:
             library = library.to(device)
-            
+
         # Move batch_index to correct device if provided
         if batch_index is not None:
             batch_index = batch_index.to(device)
-            
+
         # Move categorical covariates to correct device if provided
         if cat_covs is not None:
-            cat_covs = [cov.to(device) if isinstance(cov, torch.Tensor) else cov for cov in cat_covs]
-            
-        # Move continuous covariates to correct device if provided  
+            cat_covs = [
+                cov.to(device) if isinstance(cov, torch.Tensor) else cov
+                for cov in cat_covs
+            ]
+
+        # Move continuous covariates to correct device if provided
         if cont_covs is not None:
-            cont_covs = [cov.to(device) if isinstance(cov, torch.Tensor) else cov for cov in cont_covs]
-        
+            cont_covs = [
+                cov.to(device) if isinstance(cov, torch.Tensor) else cov
+                for cov in cont_covs
+            ]
+
         # Use the parent VAE's decoder with concatenated latents
         return super().generative(z, library, batch_index, cat_covs, cont_covs)
 
@@ -419,17 +433,17 @@ class FADVAE(SupervisedModuleClass, VAE):
         z_b_centered = z_b - z_b.mean(dim=0, keepdim=True)
         z_l_centered = z_l - z_l.mean(dim=0, keepdim=True)
         z_r_centered = z_r - z_r.mean(dim=0, keepdim=True)
-        
+
         n = z_b.size(0)
 
         # Compute cross-covariances
         cov_bl = torch.mm(z_b_centered.t(), z_l_centered) / (n - 1)
         cov_br = torch.mm(z_b_centered.t(), z_r_centered) / (n - 1)
         cov_lr = torch.mm(z_l_centered.t(), z_r_centered) / (n - 1)
-        
+
         # Return sum of squared cross-covariances (Frobenius norm)
-        penalty = (cov_bl ** 2).sum() + (cov_br ** 2).sum() + (cov_lr ** 2).sum()
-        
+        penalty = (cov_bl**2).sum() + (cov_br**2).sum() + (cov_lr**2).sum()
+
         return penalty
 
     def loss(
@@ -446,7 +460,7 @@ class FADVAE(SupervisedModuleClass, VAE):
         x: torch.Tensor = tensors[REGISTRY_KEYS.X_KEY]
         batch_index: torch.Tensor = tensors[REGISTRY_KEYS.BATCH_KEY]
         labels: torch.Tensor = tensors[REGISTRY_KEYS.LABELS_KEY]
-        
+
         # Get latent representations and distributions
         z_b = inference_outputs["z_b"]
         z_l = inference_outputs["z_l"]
@@ -465,14 +479,20 @@ class FADVAE(SupervisedModuleClass, VAE):
         else:
             # For other distributions, use general clamping
             x_safe = torch.clamp(x, min=1e-8)
-            
+
         reconst_loss = -px.log_prob(x_safe).sum(-1)
 
         # KL divergences for each latent factor
-        kl_divergence_b = kl(qb, Normal(torch.zeros_like(qb.loc), torch.ones_like(qb.scale))).sum(dim=-1)
-        kl_divergence_l = kl(ql, Normal(torch.zeros_like(ql.loc), torch.ones_like(ql.scale))).sum(dim=-1)
-        kl_divergence_r = kl(qr, Normal(torch.zeros_like(qr.loc), torch.ones_like(qr.scale))).sum(dim=-1)
-        
+        kl_divergence_b = kl(
+            qb, Normal(torch.zeros_like(qb.loc), torch.ones_like(qb.scale))
+        ).sum(dim=-1)
+        kl_divergence_l = kl(
+            ql, Normal(torch.zeros_like(ql.loc), torch.ones_like(ql.scale))
+        ).sum(dim=-1)
+        kl_divergence_r = kl(
+            qr, Normal(torch.zeros_like(qr.loc), torch.ones_like(qr.scale))
+        ).sum(dim=-1)
+
         kl_divergence = kl_divergence_b + kl_divergence_l + kl_divergence_r
 
         # Library size KL if not using observed library size
@@ -495,20 +515,23 @@ class FADVAE(SupervisedModuleClass, VAE):
         # Supervised classification losses
         pred_b = self.head_batch(z_b)
         pred_l = self.head_label(z_l)
-        
+
         sup_loss_b = F.cross_entropy(pred_b, batch_index.squeeze())
-        
+
         # For label prediction, handle potential unlabeled category
-        # If the classifier has reduced outputs (n_labels < original), 
+        # If the classifier has reduced outputs (n_labels < original),
         # the labels might need remapping to exclude unlabeled category
         labels_squeezed = labels.squeeze()
-        if hasattr(self, '_unlabeled_category_id') and self._unlabeled_category_id is not None:
+        if (
+            hasattr(self, "_unlabeled_category_id")
+            and self._unlabeled_category_id is not None
+        ):
             # Filter out unlabeled data for classification loss
             labeled_mask = labels_squeezed != self._unlabeled_category_id
             if labeled_mask.sum() > 0:  # Only compute if there are labeled samples
                 pred_l_labeled = pred_l[labeled_mask]
                 labels_labeled = labels_squeezed[labeled_mask]
-                
+
                 # If labels need remapping (classifier outputs < total categories)
                 if pred_l_labeled.size(1) < (self._unlabeled_category_id + 1):
                     # Remap labels: all indices >= unlabeled_category_id should be shifted down
@@ -521,7 +544,7 @@ class FADVAE(SupervisedModuleClass, VAE):
                 sup_loss_l = torch.tensor(0.0, device=pred_l.device, requires_grad=True)
         else:
             sup_loss_l = F.cross_entropy(pred_l, labels_squeezed)
-            
+
         sup_loss = self.lambda_b * sup_loss_b + self.lambda_l * sup_loss_l
 
         # Adversarial losses with gradient reversal
@@ -529,15 +552,18 @@ class FADVAE(SupervisedModuleClass, VAE):
         adv_pred_lb = self.adv_head_batch_from_l(gradient_reversal(z_l, self.alpha_lb))
         adv_pred_rb = self.adv_head_batch_from_r(gradient_reversal(z_r, self.alpha_rb))
         adv_pred_rl = self.adv_head_label_from_r(gradient_reversal(z_r, self.alpha_rl))
-        
+
         # Apply same logic to adversarial losses
-        if hasattr(self, '_unlabeled_category_id') and self._unlabeled_category_id is not None:
+        if (
+            hasattr(self, "_unlabeled_category_id")
+            and self._unlabeled_category_id is not None
+        ):
             labeled_mask = labels_squeezed != self._unlabeled_category_id
             if labeled_mask.sum() > 0:
                 adv_pred_bl_labeled = adv_pred_bl[labeled_mask]
                 adv_pred_rl_labeled = adv_pred_rl[labeled_mask]
                 labels_labeled = labels_squeezed[labeled_mask]
-                
+
                 if adv_pred_bl_labeled.size(1) < (self._unlabeled_category_id + 1):
                     labels_remapped = labels_labeled.clone()
                     labels_remapped[labels_labeled > self._unlabeled_category_id] -= 1
@@ -547,15 +573,19 @@ class FADVAE(SupervisedModuleClass, VAE):
                     adv_loss_bl = F.cross_entropy(adv_pred_bl_labeled, labels_labeled)
                     adv_loss_rl = F.cross_entropy(adv_pred_rl_labeled, labels_labeled)
             else:
-                adv_loss_bl = torch.tensor(0.0, device=adv_pred_bl.device, requires_grad=True)
-                adv_loss_rl = torch.tensor(0.0, device=adv_pred_rl.device, requires_grad=True)
+                adv_loss_bl = torch.tensor(
+                    0.0, device=adv_pred_bl.device, requires_grad=True
+                )
+                adv_loss_rl = torch.tensor(
+                    0.0, device=adv_pred_rl.device, requires_grad=True
+                )
         else:
             adv_loss_bl = F.cross_entropy(adv_pred_bl, labels_squeezed)
             adv_loss_rl = F.cross_entropy(adv_pred_rl, labels_squeezed)
-            
+
         adv_loss_lb = F.cross_entropy(adv_pred_lb, batch_index.squeeze())
         adv_loss_rb = F.cross_entropy(adv_pred_rb, batch_index.squeeze())
-        
+
         adv_loss = adv_loss_bl + adv_loss_lb + adv_loss_rb + adv_loss_rl
 
         # Cross-covariance penalty
@@ -566,29 +596,34 @@ class FADVAE(SupervisedModuleClass, VAE):
         total_loss = elbo_loss + sup_loss + adv_loss + xcov_loss
 
         # For training plan metrics, filter out unlabeled data to match classifier outputs
-        if hasattr(self, '_unlabeled_category_id') and self._unlabeled_category_id is not None:
+        if (
+            hasattr(self, "_unlabeled_category_id")
+            and self._unlabeled_category_id is not None
+        ):
             labels_squeezed = labels.squeeze()
             labeled_mask = labels_squeezed != self._unlabeled_category_id
             if labeled_mask.sum() > 0:
                 # Filter logits and labels for metrics computation
                 filtered_logits = pred_l[labeled_mask]
                 filtered_labels = labels_squeezed[labeled_mask]
-                
+
                 # Remap labels if classifier has reduced outputs
                 if filtered_logits.size(1) < (self._unlabeled_category_id + 1):
                     filtered_labels_remapped = filtered_labels.clone()
-                    filtered_labels_remapped[filtered_labels > self._unlabeled_category_id] -= 1
+                    filtered_labels_remapped[
+                        filtered_labels > self._unlabeled_category_id
+                    ] -= 1
                     metrics_labels = filtered_labels_remapped
                 else:
                     metrics_labels = filtered_labels
-                
+
                 metrics_logits = filtered_logits
                 metrics_classification_loss = sup_loss
             else:
                 # No labeled data in this batch - set classification_loss to None to skip metrics
-                #metrics_logits = pred_l[:0]  # Empty tensor with correct dimensions
-                #metrics_labels = labels.squeeze()[:0]  # Empty tensor
-                #metrics_classification_loss = None
+                # metrics_logits = pred_l[:0]  # Empty tensor with correct dimensions
+                # metrics_labels = labels.squeeze()[:0]  # Empty tensor
+                # metrics_classification_loss = None
                 return LossOutput(
                     loss=total_loss,
                     reconstruction_loss=reconst_loss,
@@ -608,7 +643,7 @@ class FADVAE(SupervisedModuleClass, VAE):
                         "z_l": z_l,
                         "z_r": z_r,
                     },
-        )
+                )
         else:
             # No unlabeled category handling needed
             metrics_logits = pred_l

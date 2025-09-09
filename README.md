@@ -26,24 +26,26 @@ pip install -e .
 ## Quick Start
 
 ```python
-import fadvi
+
 import scanpy as sc
 import scvi
+from fadvi import FADVI
 
 # Load your single-cell data
 adata = sc.read_h5ad("your_data.h5ad")
 
 # Setup the model
-fadvi.FADVI.setup_anndata(
+FADVI.setup_anndata(
     adata,
-    layer="counts",
     batch_key="batch",
-    labels_key="cell_type"
+    labels_key="cell_type",
+    unlabeled_category="Unknown",
+    layer="counts"
 )
 
 # Create and train the model
-model = fadvi.FADVI(adata)
-model.train(max_epochs=40)
+model = FADVI(adata)
+model.train(max_epochs=30)
 
 # Get latent representations
 latent_l = model.get_latent_representation(representation="label")
@@ -52,8 +54,6 @@ latent_b = model.get_latent_representation(representation="batch")
 # Get label predictions
 prediction_label = model.predict(prediction_mode="label")
 
-# Perform batch correction
-corrected = model.get_normalized_expression()
 ```
 
 ## Model Architecture
@@ -66,14 +66,6 @@ FADVI uses a variational autoencoder architecture with three latent spaces:
 
 The model uses adversarial training to ensure proper disentanglement between these factor spaces.
 
-## Key Components
-
-### FADVAE
-The core variational autoencoder module that implements the disentanglement architecture.
-
-### FADVI
-The high-level model class that provides the user interface and integrates with scvi-tools.
-
 
 ## Citation
 
@@ -81,13 +73,9 @@ If you use FADVI in your research, please cite:
 
 ```bibtex
 @article{fadvi2025,
-  title={FADVI: Factor Disentanglement Variational Inference for Single-Cell Analysis},
+  title={FADVI: disentangled representation learning for robust integration of single-cell and spatial omics data},
   author={Wendao Liu},
   journal={bioRxiv},
   year={2025}
 }
 ```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

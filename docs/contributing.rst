@@ -1,20 +1,20 @@
 Contributing to FADVI
-====================
+======================================================
 
 We welcome contributions to FADVI! This guide will help you get started.
 
 Getting Started
----------------
+------------------------------------------------------
 
 Development Setup
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 1. Fork the repository on GitHub
 2. Clone your fork locally:
 
 .. code-block:: bash
 
-   git clone https://github.com/your-username/fadvi.git
+   git clone https://github.com/liuwd15/fadvi.git
    cd fadvi
 
 3. Create a development environment:
@@ -32,10 +32,10 @@ Development Setup
    pre-commit install
 
 Types of Contributions
----------------------
+------------------------------------------------------
 
 Bug Reports
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When reporting bugs, please include:
 
@@ -46,7 +46,7 @@ When reporting bugs, please include:
 * Minimal code example
 
 Feature Requests
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For new features, please:
 
@@ -56,7 +56,7 @@ For new features, please:
 * Consider implementation complexity
 
 Code Contributions
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Bug fixes
 * New features
@@ -65,7 +65,7 @@ Code Contributions
 * Test coverage improvements
 
 Development Workflow
--------------------
+------------------------------------------------------
 
 1. **Create a branch** for your feature/fix:
 
@@ -86,7 +86,6 @@ Development Workflow
 
    black src/
    flake8 src/
-   mypy src/
 
 5. **Commit changes** with descriptive messages:
 
@@ -97,10 +96,10 @@ Development Workflow
 6. **Push and create a pull request**
 
 Code Standards
---------------
+------------------------------------------------------
 
 Style Guide
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Follow PEP 8 style guidelines
 * Use Black for code formatting
@@ -108,7 +107,7 @@ Style Guide
 * Write docstrings for all public functions
 
 Documentation
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Use Google-style docstrings
 * Include examples in docstrings
@@ -116,7 +115,7 @@ Documentation
 * Keep README.md up to date
 
 Testing
-~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Write tests for new features
 * Maintain test coverage above 80%
@@ -124,7 +123,7 @@ Testing
 * Include integration tests for major features
 
 Pull Request Process
--------------------
+------------------------------------------------------
 
 1. **Update documentation** if needed
 2. **Add tests** for new functionality
@@ -133,7 +132,7 @@ Pull Request Process
 5. **Submit pull request** with clear description
 
 Pull Request Template
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Please include in your PR description:
 
@@ -145,7 +144,7 @@ Please include in your PR description:
 * **Related issues**: Link to related issues
 
 Code Review Process
-------------------
+------------------------------------------------------
 
 * All pull requests require review
 * Reviewers will check:
@@ -160,7 +159,7 @@ Code Review Process
 * Be respectful and constructive
 
 Release Process
---------------
+------------------------------------------------------
 
 FADVI follows semantic versioning (SemVer):
 
@@ -169,7 +168,7 @@ FADVI follows semantic versioning (SemVer):
 * **Patch** (0.0.X): Bug fixes, backwards compatible
 
 Community Guidelines
--------------------
+------------------------------------------------------
 
 * Be respectful and inclusive
 * Help newcomers get started
@@ -177,7 +176,7 @@ Community Guidelines
 * Share knowledge and best practices
 
 Getting Help
------------
+------------------------------------------------------
 
 * **Documentation**: Check the docs first
 * **GitHub Issues**: Search existing issues
@@ -185,7 +184,7 @@ Getting Help
 * **Email**: Contact maintainers directly for sensitive issues
 
 Recognition
------------
+------------------------------------------------------
 
 All contributors will be:
 

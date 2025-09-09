@@ -1,8 +1,8 @@
 Installation
-============
+=============================================
 
 Requirements
-------------
+---------------------------------------------
 
 FADVI requires Python 3.11 or higher and the following dependencies:
 
@@ -14,39 +14,28 @@ FADVI requires Python 3.11 or higher and the following dependencies:
 * anndata
 
 Installation Methods
--------------------
+---------------------------------------------
 
 From PyPI (Recommended)
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    pip install fadvi
 
 From Source
-~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To install the latest development version:
 
 .. code-block:: bash
 
-   git clone https://github.com/your-username/fadvi.git
+   git clone https://github.com/liuwd15/fadvi.git
    cd fadvi
    pip install -e .
 
-Development Installation
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-For development, install with additional dependencies:
-
-.. code-block:: bash
-
-   git clone https://github.com/your-username/fadvi.git
-   cd fadvi
-   pip install -e ".[dev]"
-
 Verify Installation
-------------------
+---------------------------------------------
 
 To verify that FADVI is installed correctly:
 
@@ -55,10 +44,10 @@ To verify that FADVI is installed correctly:
    import fadvi
    print(fadvi.__version__)
 
-If you encounter any issues, please check the :doc:`troubleshooting guide <troubleshooting>` or open an issue on our `GitHub repository <https://github.com/your-username/fadvi>`_.
+If you encounter any issues, please open an issue on our `GitHub repository <https://github.com/liuwd15/fadvi>`_.
 
 GPU Support
------------
+---------------------------------------------
 
 FADVI automatically detects and uses GPU acceleration when available. To check if GPU is being used:
 

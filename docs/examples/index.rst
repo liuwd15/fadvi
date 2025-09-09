@@ -1,17 +1,12 @@
 Examples & Demos
-===============
+=================================
 
-This section contains interactive Jupyter notebook examples demonstrating FADVI's capabilities on real datasets.
+This section contains interactive Jupyter notebook examples demonstrating FADVI's capabilities on real datasets. Comprehensive benchmarking of FADVI against other integration methods on single-cell immune atlas data is included.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    
    benchmark_sc_immune_atlas
-
-Benchmarking Notebooks
----------------------
-
-* :doc:`benchmark_sc_immune_atlas` - Comprehensive benchmarking of FADVI against other integration methods on single-cell immune atlas data
 
 
 .. note::
@@ -20,5 +15,5 @@ Benchmarking Notebooks
    .. code-block:: bash
    
       pip install scib scib-metrics atplotlib seaborn
-   
-   Some notebooks may require specific datasets that need to be downloaded separately.
+
+   The dataset used in the benchmark needs to be downloaded separately at `Openproblems <https://openproblems.bio/datasets/cellxgene_census/immune_cell_atlas>`_.

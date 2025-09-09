@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath('../src'))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'FADVI'
+project = 'fadvi'
 copyright = '2025, Wendao Liu'
 author = 'Wendao Liu'
 release = '0.1.0'

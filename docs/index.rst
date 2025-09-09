@@ -1,10 +1,10 @@
 FADVI: Factor Disentanglement Variational Inference
-==================================================
+======================================================
 
 FADVI (Factor Disentanglement Variational Inference) is a deep learning framework for disentangling batch effects and biological factors in single-cell RNA sequencing data. Built on top of scvi-tools, FADVI provides a robust solution for analyzing complex single-cell datasets.
 
 Features
---------
+------------------------------------------------------
 
 * **Batch Effect Correction**: Effectively removes technical batch effects while preserving biological signal
 * **Factor Disentanglement**: Separates biological factors from technical confounders
@@ -12,7 +12,7 @@ Features
 * **Easy to Use**: Simple API for both beginners and advanced users
 
 Quick Start
------------
+------------------------------------------------------
 
 Install FADVI using pip:
 
@@ -54,7 +54,7 @@ Basic usage:
    changelog
 
 Indices and tables
-==================
+========================================================
 
 * :ref:`genindex`
 * :ref:`modindex`

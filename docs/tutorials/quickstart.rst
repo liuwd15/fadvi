@@ -1,10 +1,10 @@
 Quick Start Guide
-=================
+==================================================
 
 This tutorial will get you started with FADVI in just a few minutes.
 
 Installation
-------------
+--------------------------------------------------
 
 First, install FADVI:
 
@@ -13,7 +13,7 @@ First, install FADVI:
    pip install fadvi
 
 Basic Usage
------------
+---------------------------------------------------
 
 1. **Import libraries**
 
@@ -21,7 +21,6 @@ Basic Usage
 
    import fadvi
    import scanpy as sc
-   import numpy as np
 
 2. **Load data**
 
@@ -34,14 +33,15 @@ Basic Usage
 
 .. code-block:: python
 
-   # Create FADVI model
-   model = fadvi.FADVI(
-       adata,
-       batch_key='batch',
-       labels_key='cell_type'  # or whatever your label column is called
-       unlabeled_category='Unknown',  # Optional: specify unlabeled category
-       layer='counts'  # The input must be raw counts
+    fadvi.FADVI.setup_anndata(adata,
+       batch_key="batch",
+       labels_key="cell_type",
+       unlabeled_category="Unknown",
+       layer="counts"
    )
+
+   # Create FADVI model
+   model = fadvi.FADVI(adata)
    
    # Train the model
    model.train(max_epochs=30)
@@ -52,12 +52,11 @@ Basic Usage
 
    # Get latent representation
    latent = model.get_latent_representation()
-   adata.obsm['X_fadvi_l'] = latent
-   
+   adata.obsm["X_fadvi_l"] = latent
 
 
 Next Steps
-----------
+-----------------------------------------------
 
 * Learn more about the :doc:`basic_usage` workflow
 * Explore :doc:`advanced_usage` features

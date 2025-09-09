@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import torch
-
+import torchmetrics.functional as tmf
 from scvi import REGISTRY_KEYS
 from scvi.data import AnnDataManager
 from scvi.data.fields import (
@@ -18,11 +18,6 @@ from scvi.data.fields import (
     NumericalObsField,
 )
 from scvi.model._utils import _init_library_size
-from ._fadvae import FADVAE
-from scvi.train import TrainingPlan, SemiSupervisedTrainingPlan
-import torchmetrics.functional as tmf
-from scvi.train._constants import METRIC_KEYS
-
 from scvi.model.base import (
     ArchesMixin,
     BaseMinifiedModeModelClass,
@@ -30,7 +25,12 @@ from scvi.model.base import (
     SemisupervisedTrainingMixin,
     VAEMixin,
 )
-from scvi.module.base import BaseModuleClass
+from scvi.module.base import BaseModuleClass, LossOutput
+from scvi.train import SemiSupervisedTrainingPlan, TrainingPlan
+from scvi.train._constants import METRIC_KEYS
+from scvi.train._metrics import ElboMetric
+
+from ._fadvae import FADVAE
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from anndata import AnnData
 
 logger = logging.getLogger(__name__)
+
 
 class SemiSupervisedTrainingPlanFixed(SemiSupervisedTrainingPlan):
     def __init__(
@@ -97,7 +98,7 @@ class SemiSupervisedTrainingPlanFixed(SemiSupervisedTrainingPlan):
             self.n_classes,
             average="micro",
         )
-        
+
         f1 = tmf.classification.multiclass_f1_score(
             predicted_labels,
             true_labels,
@@ -142,13 +143,18 @@ class SemiSupervisedTrainingPlanFixed(SemiSupervisedTrainingPlan):
             on_epoch=True,
             batch_size=loss_output.n_obs_minibatch,
         )
-        
+
+
 class FADVI(
-    RNASeqMixin, SemisupervisedTrainingMixin, VAEMixin, ArchesMixin, BaseMinifiedModeModelClass
+    RNASeqMixin,
+    SemisupervisedTrainingMixin,
+    VAEMixin,
+    ArchesMixin,
+    BaseMinifiedModeModelClass,
 ):
     """Factor Disentanglement Variational Inference model.
 
-    This model disentangles batch-related variation, label-related variation, 
+    This model disentangles batch-related variation, label-related variation,
     and residual variation using adversarial training and cross-correlation penalties.
 
     Parameters
@@ -200,13 +206,13 @@ class FADVI(
     gamma
         Weight for cross-correlation penalty.
     **model_kwargs
-        Keyword args for :class:`~scvi.module.FADVAE`
+        Keyword args for :class:`~fadvi.FADVAE`
 
     Examples
     --------
     >>> adata = anndata.read_h5ad(path_to_anndata)
-    >>> scvi.model.FADVI.setup_anndata(adata, batch_key="batch", labels_key="labels")
-    >>> model = scvi.model.FADVI(adata)
+    >>> fadvi.FADVI.setup_anndata(adata, batch_key="batch", labels_key="labels")
+    >>> model = fadvi.FADVI(adata)
     >>> model.train()
     >>> adata.obsm["X_fadvi_b"] = model.get_latent_representation(representation="b")
     >>> adata.obsm["X_fadvi_l"] = model.get_latent_representation(representation="l")
@@ -243,34 +249,47 @@ class FADVI(
         self._set_batch_mapping()
 
         n_batch = self.summary_stats.n_batch
-        
+
         # Following SCANVI pattern: reduce n_labels for module if unlabeled category exists
         n_labels = self.summary_stats.n_labels
         unlabeled_category_id = None
-        if self.unlabeled_category_ is not None and self.unlabeled_category_ in self.labels_:
+        if (
+            self.unlabeled_category_ is not None
+            and self.unlabeled_category_ in self.labels_
+        ):
             n_labels = self.summary_stats.n_labels - 1
             # Find the ID of the unlabeled category in the label mapping
-            unlabeled_category_id = np.where(self._label_mapping == self.unlabeled_category_)[0]
+            unlabeled_category_id = np.where(
+                self._label_mapping == self.unlabeled_category_
+            )[0]
             if len(unlabeled_category_id) > 0:
                 unlabeled_category_id = int(unlabeled_category_id[0])
             else:
                 unlabeled_category_id = None
-        
+
         # Store both original and reduced n_labels
-        self.n_labels_original = self.summary_stats.n_labels  # For training plan compatibility
+        self.n_labels_original = (
+            self.summary_stats.n_labels
+        )  # For training plan compatibility
         self.n_labels = n_labels  # Reduced for module (actual prediction classes)
         n_continuous_cov = self.summary_stats.get("n_extra_continuous_covs", 0)
         n_cats_per_cov = (
-            self.adata_manager.get_state_registry(REGISTRY_KEYS.CAT_COVS_KEY).n_cats_per_key
+            self.adata_manager.get_state_registry(
+                REGISTRY_KEYS.CAT_COVS_KEY
+            ).n_cats_per_key
             if REGISTRY_KEYS.CAT_COVS_KEY in self.adata_manager.data_registry
             else None
         )
 
         # Complain if unlabeled
-        use_size_factor_key = REGISTRY_KEYS.SIZE_FACTOR_KEY in self.adata_manager.data_registry
+        use_size_factor_key = (
+            REGISTRY_KEYS.SIZE_FACTOR_KEY in self.adata_manager.data_registry
+        )
         library_log_means, library_log_vars = None, None
         if not use_size_factor_key:
-            library_log_means, library_log_vars = _init_library_size(self.adata_manager, n_batch)
+            library_log_means, library_log_vars = _init_library_size(
+                self.adata_manager, n_batch
+            )
 
         self.module = FADVAE(
             n_input=self.summary_stats.n_vars,
@@ -314,26 +333,33 @@ class FADVI(
     def _set_batch_mapping(self):
         """Set up batch mapping for converting codes to original batch labels."""
         if REGISTRY_KEYS.BATCH_KEY in self.adata_manager.data_registry:
-            batch_state_registry = self.adata_manager.get_state_registry(REGISTRY_KEYS.BATCH_KEY)
+            batch_state_registry = self.adata_manager.get_state_registry(
+                REGISTRY_KEYS.BATCH_KEY
+            )
             self._batch_mapping = batch_state_registry.categorical_mapping
             self._code_to_batch = dict(enumerate(self._batch_mapping))
         else:
             self._batch_mapping = None
             self._code_to_batch = None
-    
+
     def _get_label_mapping_for_predictions(self):
         """Get label mapping excluding unlabeled category for predictions."""
         if self._label_mapping is None:
             return None
-            
+
         # Filter out unlabeled category if it exists
-        if self.unlabeled_category_ is not None and self.unlabeled_category_ in self._label_mapping:
+        if (
+            self.unlabeled_category_ is not None
+            and self.unlabeled_category_ in self._label_mapping
+        ):
             # Return all categories except the unlabeled one
-            filtered_mapping = [cat for cat in self._label_mapping if cat != self.unlabeled_category_]
+            filtered_mapping = [
+                cat for cat in self._label_mapping if cat != self.unlabeled_category_
+            ]
             return np.array(filtered_mapping)
         else:
             return self._label_mapping
-    
+
     def _get_code_to_label_for_predictions(self):
         """Get code-to-label mapping excluding unlabeled category for predictions."""
         filtered_mapping = self._get_label_mapping_for_predictions()
@@ -361,24 +387,55 @@ class FADVI(
 
         Parameters
         ----------
-        %(param_adata)s
-        %(param_layer)s
-        %(param_batch_key)s
-        %(param_labels_key)s
-        %(param_unlabeled_category)s
-        %(param_size_factor_key)s
-        %(param_cat_cov_keys)s
-        %(param_cont_cov_keys)s
+        AnnData object.
+            Rows represent cells, columns represent features.
+        layer
+            If not `None`, uses this as the key in `adata.layers` for raw count data.
+        batch_key
+            key in `adata.obs` for batch information. Categories will automatically be converted into
+            integer categories and saved to `adata.obs['_scvi_batch']`. If `None`, assigns the same batch
+            to all the data.
+        labels_key
+            key in `adata.obs` for label information. Categories will automatically be converted into
+            integer categories and saved to `adata.obs['_scvi_labels']`. If `None`, assigns the same label
+            to all the data.
+        unlabeled_category
+            value in `adata.obs[labels_key]` that indicates unlabeled observations.
+        size_factor_key
+            key in `adata.obs` for size factor information. Instead of using library size as a size factor,
+            the provided size factor column will be used as offset in the mean of the likelihood. Assumed
+            to be on linear scale.
+        categorical_covariate_keys
+            keys in `adata.obs` that correspond to categorical data.
+            These covariates can be added in addition to the batch covariate and are also treated as
+            nuisance factors (i.e., the model tries to minimize their effects on the latent space). Thus,
+            these should not be used for biologically-relevant factors that you do _not_ want to correct
+            for.
+        continuous_covariate_keys
+            keys in `adata.obs` that correspond to continuous data.
+            These covariates can be added in addition to the batch covariate and are also treated as
+            nuisance factors (i.e., the model tries to minimize their effects on the latent space). Thus,
+            these should not be used for biologically-relevant factors that you do _not_ want to correct
+            for.
 
         Returns
         -------
-        %(returns_setup_anndata)s
+        None. Adds the following fields:
+
+            .uns['_scvi']
+                `scvi` setup dictionary
+            .obs['_scvi_labels']
+                labels encoded as integers
+            .obs['_scvi_batch']
+                batch encoded as integers
         """
         setup_method_args = cls._get_setup_method_args(**locals())
         anndata_fields = [
             LayerField(REGISTRY_KEYS.X_KEY, layer, is_count_data=True),
             CategoricalObsField(REGISTRY_KEYS.BATCH_KEY, batch_key),
-            LabelsWithUnlabeledObsField(REGISTRY_KEYS.LABELS_KEY, labels_key, unlabeled_category),
+            LabelsWithUnlabeledObsField(
+                REGISTRY_KEYS.LABELS_KEY, labels_key, unlabeled_category
+            ),
             NumericalObsField(
                 REGISTRY_KEYS.SIZE_FACTOR_KEY, size_factor_key, required=False
             ),
@@ -389,7 +446,9 @@ class FADVI(
                 REGISTRY_KEYS.CONT_COVS_KEY, continuous_covariate_keys
             ),
         ]
-        adata_manager = AnnDataManager(fields=anndata_fields, setup_method_args=setup_method_args)
+        adata_manager = AnnDataManager(
+            fields=anndata_fields, setup_method_args=setup_method_args
+        )
         adata_manager.register_fields(adata, **kwargs)
         cls.register_manager(adata_manager)
 
@@ -401,7 +460,9 @@ class FADVI(
         mc_samples: int = 5000,
         batch_size: int | None = None,
         return_dist: bool = False,
-        representation: Literal["full", "b", "batch", "l", "label", "r", "residual"] = "full",
+        representation: Literal[
+            "full", "b", "batch", "l", "label", "r", "residual", "lr", "label_residual"
+        ] = "label",
     ) -> dict[str, torch.Tensor] | torch.Tensor:
         """Return the latent representation for each cell.
 
@@ -447,11 +508,14 @@ class FADVI(
         for tensors in scdl:
             # Move tensors to model device
             device = next(self.module.parameters()).device
-            tensors = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in tensors.items()}
-            
+            tensors = {
+                k: v.to(device) if isinstance(v, torch.Tensor) else v
+                for k, v in tensors.items()
+            }
+
             inference_inputs = self.module._get_inference_input(tensors)
             outputs = self.module.inference(**inference_inputs)
-            
+
             if representation in ["b", "batch"]:
                 z = outputs["z_b"]
                 qz = outputs["qb"]
@@ -566,9 +630,9 @@ class FADVI(
         return_numpy: bool = True,
     ):
         """Predict batch or label categories using the supervised classification heads.
-        
+
         This method uses the trained encoders and classification heads to predict
-        either batch categories (using batch latent b) or label categories (using 
+        either batch categories (using batch latent b) or label categories (using
         label latent l).
 
         Parameters
@@ -602,7 +666,7 @@ class FADVI(
         adata = self._validate_anndata(adata)
         if indices is None:
             indices = np.arange(adata.n_obs)
-        
+
         scdl = self._make_data_loader(
             adata=adata, indices=indices, batch_size=batch_size
         )
@@ -611,13 +675,16 @@ class FADVI(
         for tensors in scdl:
             # Move tensors to model device
             device = next(self.module.parameters()).device
-            tensors = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in tensors.items()}
-            
+            tensors = {
+                k: v.to(device) if isinstance(v, torch.Tensor) else v
+                for k, v in tensors.items()
+            }
+
             x = tensors[REGISTRY_KEYS.X_KEY]
             batch_index = tensors.get(REGISTRY_KEYS.BATCH_KEY, None)
             cat_covs = tensors.get(REGISTRY_KEYS.CAT_COVS_KEY, None)
             cont_covs = tensors.get(REGISTRY_KEYS.CONT_COVS_KEY, None)
-            
+
             # Get the appropriate latent representation and predictions
             if prediction_mode in ["b", "batch"]:
                 # Use inference method to get batch latent (device-aware)
@@ -625,52 +692,59 @@ class FADVI(
                     x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
                 )
                 z_b = inference_outputs["z_b"]
-                
+
                 # Get batch predictions from batch classifier
                 batch_logits = self.module.head_batch(z_b)
-                
+
                 if soft:
                     batch_pred = torch.softmax(batch_logits, dim=1)
                 else:
                     batch_pred = torch.argmax(batch_logits, dim=1)
-                    
+
                 predictions.append(batch_pred.cpu())
-                
+
             elif prediction_mode in ["l", "label"]:
                 # Use inference method to get label latent (device-aware)
                 inference_outputs = self.module.inference(
                     x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
                 )
                 z_l = inference_outputs["z_l"]
-                
+
                 # Get label predictions from label classifier
                 label_logits = self.module.head_label(z_l)
-                
+
                 if soft:
                     label_pred = torch.softmax(label_logits, dim=1)
                     # Slice to exclude unlabeled category probabilities if present
                     filtered_mapping = self._get_label_mapping_for_predictions()
-                    if filtered_mapping is not None and len(filtered_mapping) < label_pred.shape[1]:
+                    if (
+                        filtered_mapping is not None
+                        and len(filtered_mapping) < label_pred.shape[1]
+                    ):
                         # Remove the unlabeled category probability (assumed to be last)
                         label_pred = label_pred[:, :-1]
                 else:
                     label_pred = torch.argmax(label_logits, dim=1)
-                    
+
                 predictions.append(label_pred.cpu())
             else:
-                raise ValueError(f"prediction_mode must be 'b', 'batch', 'l', or 'label', got {prediction_mode}")
+                raise ValueError(
+                    f"prediction_mode must be 'b', 'batch', 'l', or 'label', got {prediction_mode}"
+                )
 
         predictions = torch.cat(predictions, dim=0)
-        
+
         # Convert to numpy if tensor
         if isinstance(predictions, torch.Tensor):
             predictions = predictions.numpy()
-        
+
         # Map numerical predictions back to original categorical labels
         if not soft:
             # Hard predictions - map indices to original labels
             if prediction_mode in ["b", "batch"] and self._code_to_batch is not None:
-                predictions = np.array([self._code_to_batch[int(p)] for p in predictions])
+                predictions = np.array(
+                    [self._code_to_batch[int(p)] for p in predictions]
+                )
             elif prediction_mode in ["l", "label"]:
                 # Use filtered mapping that excludes unlabeled category
                 code_to_label_filtered = self._get_code_to_label_for_predictions()
@@ -679,10 +753,12 @@ class FADVI(
                     # Find the index of unlabeled category in the original mapping
                     unlabeled_idx = None
                     if self.unlabeled_category_ is not None:
-                        unlabeled_indices = np.where(self._label_mapping == self.unlabeled_category_)[0]
+                        unlabeled_indices = np.where(
+                            self._label_mapping == self.unlabeled_category_
+                        )[0]
                         if len(unlabeled_indices) > 0:
                             unlabeled_idx = unlabeled_indices[0]
-                    
+
                     mapped_predictions = []
                     for p in predictions:
                         p_int = int(p)
@@ -697,7 +773,7 @@ class FADVI(
                         else:
                             # Unexpected index, fallback to first valid category
                             mapped_predictions.append(code_to_label_filtered[0])
-                    
+
                     predictions = np.array(mapped_predictions)
         else:
             # Soft predictions - create DataFrame with original label names as columns
@@ -706,7 +782,7 @@ class FADVI(
                 predictions = pd.DataFrame(
                     predictions,
                     columns=self._batch_mapping[:n_categories],
-                    index=adata.obs_names[indices]
+                    index=adata.obs_names[indices],
                 )
             elif prediction_mode in ["l", "label"]:
                 # Use filtered mapping that excludes unlabeled category
@@ -716,9 +792,9 @@ class FADVI(
                     predictions = pd.DataFrame(
                         predictions,
                         columns=label_mapping_filtered[:n_categories],
-                        index=adata.obs_names[indices]
+                        index=adata.obs_names[indices],
                     )
-        
+
         # Return numpy array or pandas DataFrame as requested
         if not return_numpy and not soft:
             return predictions  # Keep as array for hard predictions
