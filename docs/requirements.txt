@@ -1,0 +1,5 @@
+sphinx>=6.0
+sphinx-rtd-theme>=2.0
+nbsphinx
+jupyter
+myst-parser
