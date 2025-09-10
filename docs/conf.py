@@ -10,6 +10,13 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.insert(0, os.path.abspath('../src'))
 
+# Try to import essential modules, but don't fail if they're not available
+try:
+    import fadvi
+except ImportError as e:
+    print(f"Warning: Could not import fadvi: {e}")
+    pass
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -56,9 +63,45 @@ autodoc_default_options = {
     'exclude-members': '__weakref__'
 }
 
+# Mock imports that might not be available during docs build
+autodoc_mock_imports = [
+    'scvi',
+    'scvi.model',
+    'scvi.module', 
+    'scvi.train',
+    'scvi.data',
+    'scvi.dataloaders',
+    'torchmetrics',
+    'lightning',
+    'pytorch_lightning',
+    'anndata',
+    'scanpy',
+    'sklearn',
+    'matplotlib',
+    'seaborn',
+]
+
+# Suppress warnings about missing references
+suppress_warnings = ['ref.citation']
+
 # Autosummary settings
 autosummary_generate = True
 autosummary_imported_members = True
+autosummary_ignore_module_all = False
+
+# Configure autosummary to ignore import errors
+def skip_member(app, what, name, obj, skip, options):
+    """Skip members that can't be imported"""
+    try:
+        # Try to access the object to see if it exists
+        if hasattr(obj, '__module__'):
+            return False
+        return skip
+    except (ImportError, AttributeError):
+        return True
+
+def setup(app):
+    app.connect('autodoc-skip-member', skip_member)
 
 # Intersphinx mapping
 intersphinx_mapping = {
