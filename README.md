@@ -2,6 +2,8 @@
 
 FADVI is a deep learning method for single-cell RNA sequencing analysis that disentangles batch-related variation, label-related variation, and residual variation using adversarial training and cross-correlation penalties.
 
+Read the [documentation] (https://fadvi.readthedocs.io/en/latest/) for usage and demo.
+
 ## Features
 
 - **Factor Disentanglement**: Separates batch effects, cell type effects, and residual variation in single-cell data
@@ -53,13 +55,13 @@ prediction_label = model.predict(prediction_mode="label")
 
 ## Model Architecture
 
-FADVI uses a variational autoencoder architecture with three latent spaces:
+FADVI uses a variational autoencoder architecture with three latent subspaces:
 
 - **z_b**: Batch-related latent factors
 - **z_l**: Label-related latent factors  
 - **z_r**: Residual latent factors
 
-The model uses adversarial training to ensure proper disentanglement between these factor spaces.
+The model uses adversarial training to ensure proper disentanglement between these factor subspaces.
 
 
 ## Citation

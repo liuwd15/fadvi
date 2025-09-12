@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fadvi"
-version = "0.1.0"
+version = "0.1.0.post1"
 description = "Factor Disentanglement Variational Inference for single-cell batch integration"
 readme = "README.md"
 license = {text = "MIT"}
