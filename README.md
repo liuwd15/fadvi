@@ -2,7 +2,7 @@
 
 FADVI is a deep learning method for single-cell RNA sequencing analysis that disentangles batch-related variation, label-related variation, and residual variation using adversarial training and cross-correlation penalties.
 
-Read the [documentation] (https://fadvi.readthedocs.io/en/latest/) for usage and demo.
+Read the [documentation](https://fadvi.readthedocs.io/en/latest/) for usage and demo.
 
 ## Features
 
