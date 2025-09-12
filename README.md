@@ -11,15 +11,10 @@ FADVI is a deep learning method for single-cell RNA sequencing analysis that dis
 
 ## Installation
 
-### Install from source (development)
+### Install from PyPI
 
 ```bash
-# Clone the repository
-git clone https://github.com/liuwd15/fadvi.git
-cd fadvi
-
-# Install in development mode
-pip install -e .
+pip install fadvi
 ```
 
 
@@ -68,6 +63,8 @@ The model uses adversarial training to ensure proper disentanglement between the
 
 
 ## Citation
+
+Comming soon...
 
 If you use FADVI in your research, please cite:
 

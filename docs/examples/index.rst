@@ -14,6 +14,6 @@ This section contains interactive Jupyter notebook examples demonstrating FADVI'
    
    .. code-block:: bash
    
-      pip install scib scib-metrics atplotlib seaborn
+      pip install scib scib-metrics matplotlib
 
    The dataset used in the benchmark needs to be downloaded separately at `Openproblems <https://openproblems.bio/datasets/cellxgene_census/immune_cell_atlas>`_.
