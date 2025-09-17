@@ -620,7 +620,9 @@ class FADVI(
             return_numpy=return_numpy,
         )
 
-    def _batch_classifier_for_interpretability(self, x, batch_index=None, cat_covs=None, cont_covs=None):
+    def _batch_classifier_for_interpretability(
+        self, x, batch_index=None, cat_covs=None, cont_covs=None
+    ):
         """Classifier function for batch prediction with interpretability methods."""
         inference_outputs = self.module.inference(
             x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
@@ -628,8 +630,10 @@ class FADVI(
         z_b = inference_outputs["z_b"]
         batch_logits = self.module.head_batch(z_b)
         return torch.softmax(batch_logits, dim=1)
-    
-    def _label_classifier_for_interpretability(self, x, batch_index=None, cat_covs=None, cont_covs=None):
+
+    def _label_classifier_for_interpretability(
+        self, x, batch_index=None, cat_covs=None, cont_covs=None
+    ):
         """Classifier function for label prediction with interpretability methods."""
         inference_outputs = self.module.inference(
             x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
@@ -651,7 +655,7 @@ class FADVI(
         method_args: dict | None = None,
     ) -> torch.Tensor:
         """Compute feature attributions using the specified interpretability method.
-        
+
         Parameters
         ----------
         method
@@ -668,7 +672,7 @@ class FADVI(
             Prediction mode ("batch" or "label")
         method_args
             Additional arguments for the interpretability method
-        
+
         Returns
         -------
         attributions
@@ -677,19 +681,20 @@ class FADVI(
         # Get hard predictions for attribution computation
         hard_pred = predictions.argmax(dim=1) if soft else predictions
         method_args = method_args or {}
-        
+
         # Select appropriate classifier function
         if prediction_mode in ["b", "batch"]:
             classifier_fn = self._batch_classifier_for_interpretability
         else:  # prediction_mode in ["l", "label"]
             classifier_fn = self._label_classifier_for_interpretability
-        
+
         # Compute attributions with gradients enabled
         with torch.enable_grad():
             x_attr = x.clone().detach().requires_grad_(True)
-            
+
             if method == "ig":
                 from captum.attr import IntegratedGradients
+
                 attributor = IntegratedGradients(classifier_fn)
                 attribution = attributor.attribute(
                     x_attr,
@@ -699,6 +704,7 @@ class FADVI(
                 )
             elif method == "gs":
                 from captum.attr import GradientShap
+
                 attributor = GradientShap(classifier_fn)
                 baselines = torch.zeros_like(x_attr)
                 attribution = attributor.attribute(
@@ -710,7 +716,7 @@ class FADVI(
                 )
             else:
                 raise ValueError(f"Unknown interpretability method: {method}")
-            
+
             return attribution.detach().cpu()
 
     def _validate_interpretability_setup(self, method: str | None) -> None:
@@ -734,7 +740,9 @@ class FADVI(
         interpretability: Literal["ig", "gs"] | None = None,
         interpretability_args: dict | None = None,
         return_dict: bool = True,
-    ) -> np.ndarray | pd.DataFrame | tuple[np.ndarray | pd.DataFrame, np.ndarray] | dict:
+    ) -> (
+        np.ndarray | pd.DataFrame | tuple[np.ndarray | pd.DataFrame, np.ndarray] | dict
+    ):
         """Predict batch or label categories using the supervised classification heads.
 
         This method uses the trained encoders and classification heads to predict
@@ -784,10 +792,10 @@ class FADVI(
         # Set model to eval mode
         if self.module.training:
             self.module.eval()
-        
+
         # Validate interpretability setup
         self._validate_interpretability_setup(interpretability)
-        
+
         # Prepare data
         adata = self._validate_anndata(adata)
         if indices is None:
@@ -851,7 +859,7 @@ class FADVI(
             # Automatically call get_ranked_features like _training_mixin.py
             if attributions is not None and len(attributions) > 0:
                 attributions = self.get_ranked_features(adata, attributions)
-            
+
             if return_dict:
                 return {"predictions": predictions, "attributions": attributions}
             else:
@@ -928,7 +936,7 @@ class FADVI(
                 if code_to_label_filtered is not None:
                     # Handle case where classifier might predict unlabeled category index
                     unlabeled_idx = self._get_unlabeled_category_index()
-                    
+
                     mapped_predictions = []
                     for p in predictions:
                         p_int = int(p)
@@ -969,10 +977,8 @@ class FADVI(
         """Get the index of the unlabeled category if it exists."""
         if self.unlabeled_category_ is None:
             return None
-        
-        unlabeled_indices = np.where(
-            self._label_mapping == self.unlabeled_category_
-        )[0]
+
+        unlabeled_indices = np.where(self._label_mapping == self.unlabeled_category_)[0]
         return unlabeled_indices[0] if len(unlabeled_indices) > 0 else None
 
     def get_ranked_features(
@@ -1025,29 +1031,31 @@ class FADVI(
         mean_attrs = attributions.mean(axis=0)
         std_attrs = attributions.std(axis=0)
         abs_mean_attrs = np.abs(attributions).mean(axis=0)
-        
+
         # Get feature names
-        if hasattr(adata, 'var_names'):
+        if hasattr(adata, "var_names"):
             feature_names = adata.var_names.tolist()
         else:
             feature_names = [f"feature_{i}" for i in range(attributions.shape[1])]
 
         # Create DataFrame
-        df = pd.DataFrame({
-            'feature': feature_names,
-            'feature_idx': range(len(feature_names)),
-            'attribution_mean': mean_attrs,
-            'attribution_std': std_attrs,
-            'attribution_abs_mean': abs_mean_attrs,
-            'n_cells': attributions.shape[0],
-        })
+        df = pd.DataFrame(
+            {
+                "feature": feature_names,
+                "feature_idx": range(len(feature_names)),
+                "attribution_mean": mean_attrs,
+                "attribution_std": std_attrs,
+                "attribution_abs_mean": abs_mean_attrs,
+                "n_cells": attributions.shape[0],
+            }
+        )
 
         # Sort by absolute mean attribution (most important features first)
-        df = df.sort_values('attribution_abs_mean', ascending=False)
-        
+        df = df.sort_values("attribution_abs_mean", ascending=False)
+
         # Reset index after sorting
         df = df.reset_index(drop=True)
-        
+
         # Return top_n features if specified
         if top_n is not None:
             df = df.head(top_n)

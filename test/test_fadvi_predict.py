@@ -224,12 +224,11 @@ def test_predict_method():
 
     # Batch confusion matrix
     batch_cm = confusion_matrix(true_batch, pred_batch_hard)
-
+    print(f"Batch confusion matrix shape: {batch_cm.shape}")
 
     # Label confusion matrix
     label_cm = confusion_matrix(true_labels, pred_label_hard)
-
-
+    print(f"Label confusion matrix shape: {label_cm.shape}")
 
     # Test probability distributions
     print("\n=== Analyzing Prediction Probabilities ===")
@@ -299,10 +298,11 @@ if __name__ == "__main__":
         print("Running FADVI predict method tests...")
         test_predict_method()
         print("\n🎉 Basic predict method test completed successfully!")
-        
+
         print("\n🎉🎉 ALL BASIC PREDICTION TESTS COMPLETED SUCCESSFULLY! 🎉🎉")
-        
+
     except Exception as e:
         print(f"\n❌ Tests failed with error: {e}")
         import traceback
+
         traceback.print_exc()
