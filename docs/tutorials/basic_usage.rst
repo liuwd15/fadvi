@@ -222,7 +222,7 @@ Load Model
 .. code-block:: python
 
    # Load pre-trained model
-   loaded_model = fadvi.FADVI.load("fadvi_save", adata)
+   loaded_model = fadvi.FADVI.load("fadvi_save")
 
 Next Steps
 ---------------------------------------------

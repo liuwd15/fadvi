@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fadvi"
-version = "0.1.0.post1"
-description = "Factor Disentanglement Variational Inference for single-cell batch integration"
+version = "0.2.0"
+description = "Factor Disentanglement Variational Inference for single-cell batch integration with interpretability analysis"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -34,6 +34,8 @@ keywords = [
     "deep-learning",
     "batch-correction",
     "disentanglement",
+    "interpretability",
+    "feature-attribution",
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -49,12 +51,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+interpretability = [
+    "captum>=0.6.0",
+]
 dev = [
     "pytest>=6.0",
     "pytest-cov",
     "black",
     "isort",
     "flake8",
+    "captum>=0.6.0",  # For running interpretability tests
 ]
 docs = [
     "sphinx",

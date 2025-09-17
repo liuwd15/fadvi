@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -619,7 +620,109 @@ class FADVI(
             return_numpy=return_numpy,
         )
 
-    @torch.inference_mode()
+    def _batch_classifier_for_interpretability(self, x, batch_index=None, cat_covs=None, cont_covs=None):
+        """Classifier function for batch prediction with interpretability methods."""
+        inference_outputs = self.module.inference(
+            x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
+        )
+        z_b = inference_outputs["z_b"]
+        batch_logits = self.module.head_batch(z_b)
+        return torch.softmax(batch_logits, dim=1)
+    
+    def _label_classifier_for_interpretability(self, x, batch_index=None, cat_covs=None, cont_covs=None):
+        """Classifier function for label prediction with interpretability methods."""
+        inference_outputs = self.module.inference(
+            x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
+        )
+        z_l = inference_outputs["z_l"]
+        label_logits = self.module.head_label(z_l)
+        return torch.softmax(label_logits, dim=1)
+
+    def _compute_attributions(
+        self,
+        method: Literal["ig", "gs"],
+        x: torch.Tensor,
+        predictions: torch.Tensor,
+        soft: bool,
+        batch_index: torch.Tensor | None,
+        cat_covs: torch.Tensor | None,
+        cont_covs: torch.Tensor | None,
+        prediction_mode: str,
+        method_args: dict | None = None,
+    ) -> torch.Tensor:
+        """Compute feature attributions using the specified interpretability method.
+        
+        Parameters
+        ----------
+        method
+            Interpretability method: "ig" for Integrated Gradients or "gs" for GradientShap
+        x
+            Input tensor
+        predictions
+            Model predictions (soft or hard)
+        soft
+            Whether predictions are soft (probabilities) or hard (class indices)
+        batch_index, cat_covs, cont_covs
+            Additional forward arguments for the model
+        prediction_mode
+            Prediction mode ("batch" or "label")
+        method_args
+            Additional arguments for the interpretability method
+        
+        Returns
+        -------
+        attributions
+            Feature attributions tensor
+        """
+        # Get hard predictions for attribution computation
+        hard_pred = predictions.argmax(dim=1) if soft else predictions
+        method_args = method_args or {}
+        
+        # Select appropriate classifier function
+        if prediction_mode in ["b", "batch"]:
+            classifier_fn = self._batch_classifier_for_interpretability
+        else:  # prediction_mode in ["l", "label"]
+            classifier_fn = self._label_classifier_for_interpretability
+        
+        # Compute attributions with gradients enabled
+        with torch.enable_grad():
+            x_attr = x.clone().detach().requires_grad_(True)
+            
+            if method == "ig":
+                from captum.attr import IntegratedGradients
+                attributor = IntegratedGradients(classifier_fn)
+                attribution = attributor.attribute(
+                    x_attr,
+                    target=hard_pred,
+                    additional_forward_args=(batch_index, cat_covs, cont_covs),
+                    **method_args,
+                )
+            elif method == "gs":
+                from captum.attr import GradientShap
+                attributor = GradientShap(classifier_fn)
+                baselines = torch.zeros_like(x_attr)
+                attribution = attributor.attribute(
+                    x_attr,
+                    baselines=baselines,
+                    target=hard_pred,
+                    additional_forward_args=(batch_index, cat_covs, cont_covs),
+                    **method_args,
+                )
+            else:
+                raise ValueError(f"Unknown interpretability method: {method}")
+            
+            return attribution.detach().cpu()
+
+    def _validate_interpretability_setup(self, method: str | None) -> None:
+        """Validate interpretability method and dependencies."""
+        if method in ["ig", "gs"]:
+            try:
+                importlib.import_module("captum")
+            except ImportError:
+                raise ModuleNotFoundError(
+                    "Please install captum to use interpretability functionality: pip install captum"
+                )
+
     def predict(
         self,
         adata: AnnData | None = None,
@@ -628,7 +731,10 @@ class FADVI(
         soft: bool = False,
         batch_size: int | None = None,
         return_numpy: bool = True,
-    ):
+        interpretability: Literal["ig", "gs"] | None = None,
+        interpretability_args: dict | None = None,
+        return_dict: bool = True,
+    ) -> np.ndarray | pd.DataFrame | tuple[np.ndarray | pd.DataFrame, np.ndarray] | dict:
         """Predict batch or label categories using the supervised classification heads.
 
         This method uses the trained encoders and classification heads to predict
@@ -652,17 +758,37 @@ class FADVI(
             Minibatch size for data loading into model. Defaults to `scvi.settings.batch_size`.
         return_numpy
             Return a :class:`~numpy.ndarray` instead of a :class:`~torch.Tensor`.
+        interpretability
+            If `None`, perform regular prediction. If `"ig"`, use Integrated Gradients to compute
+            feature attributions for predictions. If `"gs"`, use GradientShap to compute
+            feature attributions for predictions. Requires captum library.
+        interpretability_args
+            Keyword arguments for the interpretability method. Works with both IG and GradientShap.
+        return_dict
+            If True, return interpretability results as dict (new format).
+            If False, return as tuple (backward compatibility). Only affects interpretability results.
 
         Returns
         -------
-        predictions
-            If `soft=True`, returns class probabilities with shape `(n_cells, n_classes)`.
-            If `soft=False`, returns class predictions with shape `(n_cells,)`.
-            If `return_numpy=True`, returns numpy array, otherwise torch tensor.
+        predictions or dict/tuple with predictions and attributions
+            If `interpretability` is `None`:
+                If `soft=True`, returns class probabilities with shape `(n_cells, n_classes)`.
+                If `soft=False`, returns class predictions with shape `(n_cells,)`.
+                If `return_numpy=True`, returns numpy array, otherwise torch tensor.
+            If `interpretability` in ["ig", "gs"]:
+                If `return_dict=True` (default): Returns dict with keys:
+                    - "predictions": Model predictions (same format as above)
+                    - "attributions": Feature attributions array with shape `(n_cells, n_genes)`
+                If `return_dict=False`: Returns tuple (predictions, attributions) for backward compatibility
         """
+        # Set model to eval mode
         if self.module.training:
             self.module.eval()
-
+        
+        # Validate interpretability setup
+        self._validate_interpretability_setup(interpretability)
+        
+        # Prepare data
         adata = self._validate_anndata(adata)
         if indices is None:
             indices = np.arange(adata.n_obs)
@@ -672,68 +798,119 @@ class FADVI(
         )
 
         predictions = []
-        for tensors in scdl:
-            # Move tensors to model device
-            device = next(self.module.parameters()).device
-            tensors = {
-                k: v.to(device) if isinstance(v, torch.Tensor) else v
-                for k, v in tensors.items()
-            }
+        attributions = [] if interpretability else None
 
-            x = tensors[REGISTRY_KEYS.X_KEY]
-            batch_index = tensors.get(REGISTRY_KEYS.BATCH_KEY, None)
-            cat_covs = tensors.get(REGISTRY_KEYS.CAT_COVS_KEY, None)
-            cont_covs = tensors.get(REGISTRY_KEYS.CONT_COVS_KEY, None)
+        # Use torch.no_grad() for regular inference, enable gradients only for interpretability
+        with torch.no_grad():
+            for tensors in scdl:
+                # Move tensors to model device
+                device = next(self.module.parameters()).device
+                tensors = {
+                    k: v.to(device) if isinstance(v, torch.Tensor) else v
+                    for k, v in tensors.items()
+                }
 
-            # Get the appropriate latent representation and predictions
-            if prediction_mode in ["b", "batch"]:
-                # Use inference method to get batch latent (device-aware)
-                inference_outputs = self.module.inference(
-                    x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
+                x = tensors[REGISTRY_KEYS.X_KEY]
+                batch_index = tensors.get(REGISTRY_KEYS.BATCH_KEY, None)
+                cat_covs = tensors.get(REGISTRY_KEYS.CAT_COVS_KEY, None)
+                cont_covs = tensors.get(REGISTRY_KEYS.CONT_COVS_KEY, None)
+
+                # Get predictions based on mode
+                pred = self._compute_predictions(
+                    x, batch_index, cat_covs, cont_covs, prediction_mode, soft
                 )
-                z_b = inference_outputs["z_b"]
+                predictions.append(pred.cpu())
 
-                # Get batch predictions from batch classifier
-                batch_logits = self.module.head_batch(z_b)
+                # Compute attributions if interpretability is enabled
+                if interpretability:
+                    attr = self._compute_attributions(
+                        method=interpretability,
+                        x=x,
+                        predictions=pred,
+                        soft=soft,
+                        batch_index=batch_index,
+                        cat_covs=cat_covs,
+                        cont_covs=cont_covs,
+                        prediction_mode=prediction_mode,
+                        method_args=interpretability_args,
+                    )
+                    attributions.append(attr)
 
-                if soft:
-                    batch_pred = torch.softmax(batch_logits, dim=1)
-                else:
-                    batch_pred = torch.argmax(batch_logits, dim=1)
-
-                predictions.append(batch_pred.cpu())
-
-            elif prediction_mode in ["l", "label"]:
-                # Use inference method to get label latent (device-aware)
-                inference_outputs = self.module.inference(
-                    x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
-                )
-                z_l = inference_outputs["z_l"]
-
-                # Get label predictions from label classifier
-                label_logits = self.module.head_label(z_l)
-
-                if soft:
-                    label_pred = torch.softmax(label_logits, dim=1)
-                    # Slice to exclude unlabeled category probabilities if present
-                    filtered_mapping = self._get_label_mapping_for_predictions()
-                    if (
-                        filtered_mapping is not None
-                        and len(filtered_mapping) < label_pred.shape[1]
-                    ):
-                        # Remove the unlabeled category probability (assumed to be last)
-                        label_pred = label_pred[:, :-1]
-                else:
-                    label_pred = torch.argmax(label_logits, dim=1)
-
-                predictions.append(label_pred.cpu())
-            else:
-                raise ValueError(
-                    f"prediction_mode must be 'b', 'batch', 'l', or 'label', got {prediction_mode}"
-                )
-
+        # Concatenate results
         predictions = torch.cat(predictions, dim=0)
+        if attributions:
+            attributions = torch.cat(attributions, dim=0).numpy()
 
+        # Process predictions for output format
+        predictions = self._format_predictions(
+            predictions, prediction_mode, soft, adata, indices
+        )
+
+        # Return results
+        if interpretability:
+            # Automatically call get_ranked_features like _training_mixin.py
+            if attributions is not None and len(attributions) > 0:
+                attributions = self.get_ranked_features(adata, attributions)
+            
+            if return_dict:
+                return {"predictions": predictions, "attributions": attributions}
+            else:
+                # Backward compatibility: return tuple format
+                return predictions, attributions
+        else:
+            return predictions
+
+    def _compute_predictions(
+        self,
+        x: torch.Tensor,
+        batch_index: torch.Tensor | None,
+        cat_covs: torch.Tensor | None,
+        cont_covs: torch.Tensor | None,
+        prediction_mode: str,
+        soft: bool,
+    ) -> torch.Tensor:
+        """Compute predictions for a batch of data."""
+        # Get inference outputs
+        inference_outputs = self.module.inference(
+            x, batch_index=batch_index, cat_covs=cat_covs, cont_covs=cont_covs
+        )
+
+        if prediction_mode in ["b", "batch"]:
+            z_b = inference_outputs["z_b"]
+            logits = self.module.head_batch(z_b)
+        elif prediction_mode in ["l", "label"]:
+            z_l = inference_outputs["z_l"]
+            logits = self.module.head_label(z_l)
+        else:
+            raise ValueError(
+                f"prediction_mode must be 'b', 'batch', 'l', or 'label', got {prediction_mode}"
+            )
+
+        if soft:
+            pred = torch.softmax(logits, dim=1)
+            # Handle label filtering for soft predictions
+            if prediction_mode in ["l", "label"]:
+                filtered_mapping = self._get_label_mapping_for_predictions()
+                if (
+                    filtered_mapping is not None
+                    and len(filtered_mapping) < pred.shape[1]
+                ):
+                    # Remove the unlabeled category probability (assumed to be last)
+                    pred = pred[:, :-1]
+        else:
+            pred = torch.argmax(logits, dim=1)
+
+        return pred
+
+    def _format_predictions(
+        self,
+        predictions: torch.Tensor,
+        prediction_mode: str,
+        soft: bool,
+        adata: AnnData,
+        indices: list[int],
+    ) -> np.ndarray | pd.DataFrame:
+        """Format predictions for output based on soft/hard and return type preferences."""
         # Convert to numpy if tensor
         if isinstance(predictions, torch.Tensor):
             predictions = predictions.numpy()
@@ -750,15 +927,8 @@ class FADVI(
                 code_to_label_filtered = self._get_code_to_label_for_predictions()
                 if code_to_label_filtered is not None:
                     # Handle case where classifier might predict unlabeled category index
-                    # Find the index of unlabeled category in the original mapping
-                    unlabeled_idx = None
-                    if self.unlabeled_category_ is not None:
-                        unlabeled_indices = np.where(
-                            self._label_mapping == self.unlabeled_category_
-                        )[0]
-                        if len(unlabeled_indices) > 0:
-                            unlabeled_idx = unlabeled_indices[0]
-
+                    unlabeled_idx = self._get_unlabeled_category_index()
+                    
                     mapped_predictions = []
                     for p in predictions:
                         p_int = int(p)
@@ -766,9 +936,7 @@ class FADVI(
                             # Valid prediction, use filtered mapping
                             mapped_predictions.append(code_to_label_filtered[p_int])
                         elif unlabeled_idx is not None and p_int == unlabeled_idx:
-                            # Classifier predicted unlabeled category - this shouldn't happen in a well-trained model
-                            # For now, map to the most frequent class or handle gracefully
-                            # We'll map to index 0 (first valid category) as a fallback
+                            # Classifier predicted unlabeled category - fallback to first valid
                             mapped_predictions.append(code_to_label_filtered[0])
                         else:
                             # Unexpected index, fallback to first valid category
@@ -795,10 +963,93 @@ class FADVI(
                         index=adata.obs_names[indices],
                     )
 
-        # Return numpy array or pandas DataFrame as requested
-        if not return_numpy and not soft:
-            return predictions  # Keep as array for hard predictions
-        elif soft:
-            return predictions  # DataFrame for soft predictions
+        return predictions
+
+    def _get_unlabeled_category_index(self) -> int | None:
+        """Get the index of the unlabeled category if it exists."""
+        if self.unlabeled_category_ is None:
+            return None
+        
+        unlabeled_indices = np.where(
+            self._label_mapping == self.unlabeled_category_
+        )[0]
+        return unlabeled_indices[0] if len(unlabeled_indices) > 0 else None
+
+    def get_ranked_features(
+        self,
+        adata: AnnData | None = None,
+        attributions: np.ndarray | None = None,
+        top_n: int | None = None,
+    ) -> pd.DataFrame:
+        """Get ranked gene list based on feature attribution scores.
+
+        This method takes attribution scores from interpretability methods (IG or GradientShap)
+        and returns a ranked DataFrame of genes/features ordered by their importance.
+
+        Parameters
+        ----------
+        adata
+            AnnData object that has been registered via :meth:`~fadvi.FADVI.setup_anndata`.
+            If `None`, uses the AnnData object used to initialize the model.
+        attributions
+            Attribution matrix from interpretability analysis with shape `(n_cells, n_genes)`.
+            Typically obtained from the `predict` method with `interpretability="ig"` or `"gs"`.
+        top_n
+            Number of top features to return. If `None`, returns all features.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with ranked features containing columns:
+            - 'feature': Gene/feature name
+            - 'feature_idx': Original feature index
+            - 'attribution_mean': Mean attribution score across cells
+            - 'attribution_std': Standard deviation of attribution scores
+            - 'attribution_abs_mean': Mean absolute attribution score
+            - 'n_cells': Number of cells in the analysis
+
+        Examples
+        --------
+        >>> # Get predictions with interpretability
+        >>> result = model.predict(adata, interpretability="ig")
+        >>> # Get ranked features
+        >>> ranked_features = model.get_ranked_features(adata, result["attributions"])
+        >>> print(ranked_features.head())
+        """
+        if attributions is None:
+            raise ValueError("attributions parameter is required")
+
+        adata = self._validate_anndata(adata)
+
+        # Compute attribution statistics
+        mean_attrs = attributions.mean(axis=0)
+        std_attrs = attributions.std(axis=0)
+        abs_mean_attrs = np.abs(attributions).mean(axis=0)
+        
+        # Get feature names
+        if hasattr(adata, 'var_names'):
+            feature_names = adata.var_names.tolist()
         else:
-            return predictions  # numpy array for hard predictions
+            feature_names = [f"feature_{i}" for i in range(attributions.shape[1])]
+
+        # Create DataFrame
+        df = pd.DataFrame({
+            'feature': feature_names,
+            'feature_idx': range(len(feature_names)),
+            'attribution_mean': mean_attrs,
+            'attribution_std': std_attrs,
+            'attribution_abs_mean': abs_mean_attrs,
+            'n_cells': attributions.shape[0],
+        })
+
+        # Sort by absolute mean attribution (most important features first)
+        df = df.sort_values('attribution_abs_mean', ascending=False)
+        
+        # Reset index after sorting
+        df = df.reset_index(drop=True)
+        
+        # Return top_n features if specified
+        if top_n is not None:
+            df = df.head(top_n)
+
+        return df

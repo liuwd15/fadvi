@@ -9,6 +9,81 @@ and this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0
 [Released]
 -------------------------------------
 
+[0.2.0] - 2025-09-15
+-------------------------------------
+
+Added
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Interpretability Analysis**: Feature attribution support using Captum library
+  
+  * Integrated Gradients (IG) method for feature importance analysis
+  * GradientShap (GS) method as alternative attribution approach
+  * Automatic feature ranking with statistical summaries
+  * Support for both batch and label prediction interpretability
+  * Integration with ``predict()`` method via ``interpretability`` parameter
+  * Customizable attribution method parameters
+
+* **Enhanced Prediction Interface**:
+  
+  * ``get_ranked_features()`` method for automatic feature ranking
+  * Automatic integration of interpretability with prediction workflow
+  * Flexible return formats (dict/tuple) via ``return_dict`` parameter
+  * Comprehensive attribution result DataFrames with statistical summaries
+
+* **Documentation Improvements**:
+  
+  * Advanced usage tutorial with interpretability examples
+  * Complete code examples for attribution methods
+  * Performance optimization guidelines
+  * Visualization and analysis workflows
+  * Error handling best practices
+
+* **Test Suite Enhancements**:
+  
+  * Dedicated interpretability test module (``test_interpretability.py``)
+  * Comprehensive testing for both IG and GS methods  
+  * Test coverage for error handling and edge cases
+  * Parameter validation and consistency testing
+  * Integration tests for prediction + interpretability workflows
+
+Improved
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Code Organization**: 
+  
+  * Reorganized test suite with clear separation of concerns
+  * ``test_fadvi_predict.py`` now focuses solely on basic prediction testing
+  * All interpretability functionality consolidated in ``test_interpretability.py``
+  * Improved test discoverability with pytest-compatible naming
+
+* **API Consistency**:
+  
+  * Standardized return formats across prediction methods
+  * Enhanced parameter validation and error messages
+  * Backward-compatible API with new optional parameters
+
+* **Performance**:
+  
+  * Memory-efficient batch processing for interpretability analysis
+  * Optimized attribution computation for large datasets
+  * Configurable batch sizes for different hardware configurations
+
+Technical
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added Captum as optional dependency for interpretability features
+* Enhanced type hints for interpretability-related methods
+* Improved error handling with informative messages when dependencies missing
+* Thread-safe attribution computation
+
+Dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* captum (optional, required for interpretability features)
+* All existing dependencies maintained
+
+
 [0.1.0.post1] - 2025-09-12
 -------------------------------------
 

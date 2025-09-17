@@ -15,6 +15,7 @@ import pandas as pd
 import scanpy as sc
 import scvi
 import seaborn as sns
+import torch
 from sklearn.metrics import accuracy_score, classification_report
 
 # Import FADVI
@@ -52,8 +53,8 @@ def load_data():
     print(f"Data range: [{adata.X.min():.3f}, {adata.X.max():.3f}]")
 
     # Add batch and label annotations that match the expected names
-    adata.obs["cancer"] = adata.obs["batch"].astype("category")
-    adata.obs["reactive"] = adata.obs["labels"].astype("category")
+    adata.obs["batch"] = adata.obs["batch"].astype("category")
+    adata.obs["label"] = adata.obs["labels"].astype("category")
 
     # Basic preprocessing
     adata.var_names_make_unique()
@@ -115,8 +116,8 @@ def load_data():
     ].copy()  # Important: copy to avoid view issues
 
     print(f"Number of highly variable genes: {adata.n_vars}")
-    print(f"Batch categories: {adata.obs['cancer'].cat.categories.tolist()}")
-    print(f"Label categories: {adata.obs['reactive'].cat.categories.tolist()}")
+    print(f"Batch categories: {adata.obs['batch'].cat.categories.tolist()}")
+    print(f"Label categories: {adata.obs['label'].cat.categories.tolist()}")
 
     return adata
 
@@ -129,7 +130,7 @@ def test_predict_method():
 
     # Setup FADVI model
     print("Setting up FADVI model...")
-    FADVI.setup_anndata(adata, batch_key="cancer", labels_key="reactive")
+    FADVI.setup_anndata(adata, batch_key="batch", labels_key="label")
 
     # Initialize model with smaller latent dimensions for faster testing
     model = FADVI(adata, n_latent_b=5, n_latent_l=5, n_latent_r=5)
@@ -142,8 +143,8 @@ def test_predict_method():
     print("\n=== Testing Batch Prediction ===")
 
     # Get true batch labels (as categorical strings now)
-    true_batch = adata.obs["cancer"].values  # Get categorical values, not codes
-    batch_categories = adata.obs["cancer"].cat.categories
+    true_batch = adata.obs["batch"].values  # Get categorical values, not codes
+    batch_categories = adata.obs["batch"].cat.categories
 
     # Predict batch categories (hard predictions)
     print("Predicting batch categories (hard predictions)...")
@@ -172,8 +173,8 @@ def test_predict_method():
     print("\n=== Testing Label Prediction ===")
 
     # Get true label labels (as categorical strings now)
-    true_labels = adata.obs["reactive"].values  # Get categorical values, not codes
-    label_categories = adata.obs["reactive"].cat.categories
+    true_labels = adata.obs["label"].values  # Get categorical values, not codes
+    label_categories = adata.obs["label"].cat.categories
 
     # Predict label categories (hard predictions)
     print("Predicting label categories (hard predictions)...")
@@ -224,40 +225,11 @@ def test_predict_method():
     # Batch confusion matrix
     batch_cm = confusion_matrix(true_batch, pred_batch_hard)
 
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    sns.heatmap(
-        batch_cm,
-        annot=True,
-        fmt="d",
-        xticklabels=batch_categories,
-        yticklabels=batch_categories,
-        cmap="Blues",
-    )
-    plt.title(f"Batch Prediction Confusion Matrix\nAccuracy: {batch_accuracy:.3f}")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
 
     # Label confusion matrix
     label_cm = confusion_matrix(true_labels, pred_label_hard)
 
-    plt.subplot(1, 2, 2)
-    sns.heatmap(
-        label_cm,
-        annot=True,
-        fmt="d",
-        xticklabels=label_categories,
-        yticklabels=label_categories,
-        cmap="Blues",
-    )
-    plt.title(f"Label Prediction Confusion Matrix\nAccuracy: {label_accuracy:.3f}")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
 
-    plt.tight_layout()
-    plt.savefig("fadvi_prediction_confusion_matrices.png", dpi=300, bbox_inches="tight")
-    print("Saved confusion matrices to 'fadvi_prediction_confusion_matrices.png'")
 
     # Test probability distributions
     print("\n=== Analyzing Prediction Probabilities ===")
@@ -312,16 +284,25 @@ def test_predict_method():
     # Note: pytest test functions should not return values
 
 
+# Pytest-discoverable test functions
+def test_basic_predict():
+    """Pytest-discoverable version of basic predict test."""
+    test_predict_method()
+
+
 if __name__ == "__main__":
     # Set random seeds for reproducibility
     np.random.seed(42)
 
-    # Run the test
+    # Run the tests
     try:
+        print("Running FADVI predict method tests...")
         test_predict_method()
-        print("\n🎉 FADVI predict method test completed successfully!")
+        print("\n🎉 Basic predict method test completed successfully!")
+        
+        print("\n🎉🎉 ALL BASIC PREDICTION TESTS COMPLETED SUCCESSFULLY! 🎉🎉")
+        
     except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print(f"\n❌ Tests failed with error: {e}")
         import traceback
-
         traceback.print_exc()
