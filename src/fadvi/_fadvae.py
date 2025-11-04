@@ -108,7 +108,7 @@ class FADVAE(SupervisedModuleClass, VAE):
         n_latent_b: int = 30,
         n_latent_l: int = 30,
         n_latent_r: int = 10,
-        n_layers: int = 1,
+        n_layers: int = 2,
         n_continuous_cov: int = 0,
         n_cats_per_cov: Iterable[int] | None = None,
         dropout_rate: float = 0.1,

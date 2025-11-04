@@ -162,6 +162,8 @@ class FADVI(
     ----------
     adata
         AnnData object that has been registered via :meth:`~scvi.model.FADVI.setup_anndata`.
+    registry
+        Registry of the datamodule used to train FADVI model.
     n_hidden
         Number of nodes per hidden layer.
     n_latent_b
@@ -225,11 +227,12 @@ class FADVI(
     def __init__(
         self,
         adata: AnnData,
+        registry: dict | None = None,
         n_hidden: int = 128,
         n_latent_b: int = 30,
         n_latent_l: int = 30,
         n_latent_r: int = 10,
-        n_layers: int = 1,
+        n_layers: int = 2,
         dropout_rate: float = 0.1,
         dispersion: Literal["gene", "gene-batch", "gene-label", "gene-cell"] = "gene",
         gene_likelihood: Literal["zinb", "nb", "poisson"] = "zinb",
@@ -244,7 +247,7 @@ class FADVI(
         gamma: float = 1.0,
         **model_kwargs,
     ):
-        super().__init__(adata)
+        super().__init__(adata, registry)
 
         self._set_indices_and_labels()
         self._set_batch_mapping()
@@ -267,6 +270,13 @@ class FADVI(
                 unlabeled_category_id = int(unlabeled_category_id[0])
             else:
                 unlabeled_category_id = None
+        else:
+            if adata is not None and len(set(self.labels_)) == (
+                self.summary_stats.n_labels - 1
+            ):
+                n_labels = self.summary_stats.n_labels - 1
+            else:
+                n_labels = self.summary_stats.n_labels
 
         # Store both original and reduced n_labels
         self.n_labels_original = (
@@ -274,13 +284,31 @@ class FADVI(
         )  # For training plan compatibility
         self.n_labels = n_labels  # Reduced for module (actual prediction classes)
         n_continuous_cov = self.summary_stats.get("n_extra_continuous_covs", 0)
-        n_cats_per_cov = (
-            self.adata_manager.get_state_registry(
-                REGISTRY_KEYS.CAT_COVS_KEY
-            ).n_cats_per_key
-            if REGISTRY_KEYS.CAT_COVS_KEY in self.adata_manager.data_registry
-            else None
-        )
+        if adata is not None:
+            n_cats_per_cov = (
+                self.adata_manager.get_state_registry(
+                    REGISTRY_KEYS.CAT_COVS_KEY
+                ).n_cats_per_key
+                if REGISTRY_KEYS.CAT_COVS_KEY in self.adata_manager.data_registry
+                else None
+            )
+        else:
+            # custom datamodule
+            if (
+                len(
+                    self.registry["field_registries"][f"{REGISTRY_KEYS.CAT_COVS_KEY}"][
+                        "state_registry"
+                    ]
+                )
+                > 0
+            ):
+                n_cats_per_cov = tuple(
+                    self.registry["field_registries"][f"{REGISTRY_KEYS.CAT_COVS_KEY}"][
+                        "state_registry"
+                    ]["n_cats_per_key"]
+                )
+            else:
+                n_cats_per_cov = None
 
         # Complain if unlabeled
         use_size_factor_key = (
@@ -321,7 +349,8 @@ class FADVI(
             **model_kwargs,
         )
         self._model_summary_string = (
-            f"FADVI Model with the following params: \nn_hidden: {n_hidden}, "
+            f"FADVI Model with the following params: \n"
+            f"unlabeled_category: {self.unlabeled_category_}, n_hidden: {n_hidden}, "
             f"n_latent_b: {n_latent_b}, n_latent_l: {n_latent_l}, n_latent_r: {n_latent_r}, "
             f"n_layers: {n_layers}, dropout_rate: {dropout_rate}, "
             f"dispersion: {dispersion}, gene_likelihood: {gene_likelihood}, "
