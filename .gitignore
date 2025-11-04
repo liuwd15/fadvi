@@ -66,9 +66,13 @@ instance/
 
 # Sphinx documentation
 docs/_build/
-docs/_static/
 docs/_templates/
 docs/api/generated/
+
+# Keep logo and important static assets, ignore Sphinx-generated static files
+docs/_static/*
+!docs/_static/logo.png
+!docs/_static/.gitkeep
 
 # PyBuilder
 target/

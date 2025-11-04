@@ -1,6 +1,12 @@
-# FADVI: Factor Disentanglement Variational Inference
+<p align="center">
+  <img src="docs/_static/logo.png" alt="FADVI Logo" width="400"/>
+</p>
 
+<h1 align="center">FADVI: Factor Disentanglement Variational Inference</h1>
+
+<p align="center">
 FADVI is a deep learning method for single-cell omics and spatial transcriptomics analysis that disentangles batch-related variation, label-related variation, and residual variation using adversarial training and cross-correlation penalties.
+</p>
 
 Read the [documentation](https://fadvi.readthedocs.io/en/latest/) for usage and demo.
 
@@ -67,7 +73,7 @@ The model uses adversarial training and cross-covariance penalty to ensure prope
 
 ## Citation
 
-If you use FADVI in your research, please cite our preprint [documentation](https://www.biorxiv.org/content/10.1101/2025.11.03.683998)
+If you use FADVI in your research, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2025.11.03.683998)
 
 ```bibtex
 @article{fadvi2025,

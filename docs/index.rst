@@ -1,3 +1,8 @@
+.. image:: _static/logo.png
+   :align: center
+   :width: 400px
+   :alt: FADVI Logo
+
 FADVI: Factor Disentanglement Variational Inference
 ======================================================
 

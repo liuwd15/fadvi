@@ -1,0 +1,2 @@
+# This file ensures the _static directory exists even when empty
+# It can be used to store custom CSS, JavaScript, or other static files for documentation
