@@ -9,6 +9,56 @@ and this project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0
 [Released]
 -------------------------------------
 
+[0.3.0] - 2026-08-30
+-------------------------------------
+
+Added
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* **Disentanglement metrics** (``fadvi._disentanglement_metrics``), exposed as
+  methods on :class:`~fadvi.FADVI`:
+
+  * ``evaluate_disentanglement()`` — overall quantification of subspace separation
+  * ``analyze_subspace_specificity()`` — how well each subspace predicts its factor
+  * ``compute_orthogonality_scores()`` — canonical-correlation based independence
+  * ``analyze_residual_interpretability()`` — checks whether ``z_r`` acts as a
+    signal sink. Accepts explicit ``batch_key`` and ``labels_key`` arguments and
+    reports the columns actually used (``batch_key_used``, ``labels_key_used``);
+    if omitted, the obs columns are resolved from a candidate list.
+  * Predictability is scored with cross-validation, so it is not inflated by
+    overfitting
+  * Orthogonality and cross-correlation are reported as continuous values. No
+    pass/fail threshold is applied to them, since neither has a
+    community-standard cut-off; interpret predictability against the
+    majority-class rate rather than ``1 / n_classes``.
+
+* **Implementation documentation**: a new :doc:`implementation` page covering the
+  loss terms, gradient-reversal layer and training-stability evidence,
+  hyperparameter meanings and sensitivity, reproducibility guidance, and measured
+  runtime/memory at 10k–300k cells.
+
+* **Tests**: ``test_metrics.py`` covering the disentanglement metrics against
+  synthetic data with known structure.
+
+* **Top-level exports**: the disentanglement metrics are now importable directly
+  from ``fadvi``, so they can be applied to latent representations from any
+  source rather than only to a fitted model:
+  ``compute_cross_correlation``, ``compute_mutual_information``,
+  ``compute_orthogonality_score``, ``evaluate_subspace_predictability``,
+  ``analyze_residual_interpretability``, ``evaluate_disentanglement_quality``
+  and ``compare_disentanglement_methods``.
+
+* **Tutorial**: a new :doc:`tutorials/disentanglement_metrics` page covering how
+  to evaluate the factorisation, including why predictability must be read
+  against the majority-class rate rather than ``1 / n_classes``.
+
+Fixed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Malformed reStructuredText in the ``predict()`` docstring that produced Sphinx
+  warnings and rendered incorrectly.
+* Duplicate autodoc entries in the API reference.
+
 [0.2.0] - 2025-11-04
 -------------------------------------
 

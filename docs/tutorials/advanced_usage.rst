@@ -347,6 +347,6 @@ Next Steps
 -----------------------
 
 * Explore :doc:`spatial_and_single_cell` for integrating spatial transcriptomics data with single-cell data
-* Contribute to the project on `GitHub <https://github.com/your-username/fadvi>`_
+* Explore :doc:`disentanglement_metrics` for evaluating disentanglement of subspaces
 * Report issues or request features
 * Check out the :doc:`../api/index` for complete API documentation

@@ -35,7 +35,6 @@ Read the [documentation](https://fadvi.readthedocs.io/en/latest/) for usage and 
 pip install fadvi
 ```
 
-
 ## Quick Start
 
 ```python
@@ -73,9 +72,9 @@ prediction_label = model.predict(prediction_mode="label")
 
 FADVI uses a variational autoencoder architecture with three latent subspaces:
 
-- **z_b**: Batch-related latent factors
-- **z_l**: Label-related latent factors  
-- **z_r**: Residual latent factors
+- **z_b**: Batch-related latent representation
+- **z_l**: Label-related latent representation
+- **z_r**: Residual latent representation
 
 The model uses adversarial training and cross-covariance penalty to ensure proper disentanglement between these factor subspaces.
 

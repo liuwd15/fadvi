@@ -54,6 +54,7 @@ Basic usage:
    installation
    tutorials/index
    examples/index
+   implementation
    api/index
    contributing
    changelog

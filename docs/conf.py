@@ -21,10 +21,22 @@ except ImportError as e:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'fadvi'
-copyright = '2025, Wendao Liu'
+copyright = '2026, Wendao Liu'
 author = 'Wendao Liu'
-release = '0.1.0'
-version = '0.1.0'
+
+# Read the version from the installed package metadata rather than hard-coding
+# it here, so the docs cannot drift out of step with pyproject.toml (they were
+# pinned at 0.1.0 while the package was at 0.3.0).
+try:
+    from importlib.metadata import version as _pkg_version
+    release = _pkg_version('fadvi')
+except Exception:                      # not installed: fall back to pyproject
+    import re as _re
+    import pathlib as _pathlib
+    _toml = (_pathlib.Path(__file__).parent.parent / 'pyproject.toml').read_text()
+    _m = _re.search(r'^version\s*=\s*["\']([^"\']+)["\']', _toml, _re.M)
+    release = _m.group(1) if _m else '0.0.0'
+version = release
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -110,7 +122,7 @@ intersphinx_mapping = {
     'scipy': ('https://docs.scipy.org/doc/scipy/', None),
     'pandas': ('https://pandas.pydata.org/docs/', None),
     'torch': ('https://pytorch.org/docs/stable/', None),
-    'scvi': ('https://docs.scvi-tools.org/', None),
+    'scvi': ('https://docs.scvi-tools.org/en/stable/', None),
 }
 
 
@@ -129,7 +141,7 @@ html_theme_options = {
     'includehidden': True,
     'titles_only': False,
     'logo_only': False,
-    'display_version': True,
+    # 'display_version' was removed in sphinx_rtd_theme >= 3.0
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
     'vcs_pageview_mode': '',

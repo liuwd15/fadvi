@@ -25,6 +25,8 @@ Can I use unlabeled ST data?
 The first step is to annotate cell type labels in the ST data using matched scRNA-seq data. 
 Any methods for label transfer can be employed. `TACCO <https://github.com/simonwm/tacco>`_ is demonstrated in this tutorial.
 
+We find that FADVI is robust to label noise, with nearly no integration performance change with 5%-20% wrong labels. Therefore, even if the label transfer method output some wrong labels, FADVI integration performance is likely not decreased.
+
 Annotating ST data with TACCO
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -66,7 +68,7 @@ FADVI integration
    model = fadvi.FADVI(adata)
 
    # Train with default settings
-   model.train(max_epochs=30) # 30 epoches should be good for most datasets
+   model.train(max_epochs=30) # 30 epochs should be good for most datasets
 
    # Get latent representation
    latent = model.get_latent_representation()

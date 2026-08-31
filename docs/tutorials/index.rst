@@ -9,5 +9,6 @@ Learn how to use FADVI with these step-by-step tutorials.
    quickstart
    basic_usage
    advanced_usage
+   disentanglement_metrics
    spatial_and_single_cell
 

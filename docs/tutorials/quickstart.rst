@@ -46,6 +46,8 @@ Basic Usage
    # Train the model
    model.train(max_epochs=30)
 
+Based on our experience with multiple datasets, training 30-50 epochs is enough to reach best integration performance. 
+
 4. **Get results**
 
 .. code-block:: python

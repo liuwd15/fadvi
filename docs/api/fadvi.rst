@@ -1,13 +1,7 @@
-FADVI Module
-============
+FADVI Model
+===========
 
-.. automodule:: fadvi
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Main Interface
---------------
+The main user-facing model class.
 
 .. autoclass:: fadvi.FADVI
    :members:

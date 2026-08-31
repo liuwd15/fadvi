@@ -787,8 +787,10 @@ class FADVI(
             Indices of cells in adata to use. If `None`, all cells are used.
         prediction_mode
             What to predict:
+
             - "b" or "batch": Predict batch categories using the batch latent (b) and batch classifier
             - "l" or "label": Predict label categories using the label latent (l) and label classifier
+
         soft
             If `True`, return class probabilities. If `False`, return class predictions.
         batch_size
@@ -808,15 +810,17 @@ class FADVI(
         Returns
         -------
         predictions or dict/tuple with predictions and attributions
-            If `interpretability` is `None`:
-                If `soft=True`, returns class probabilities with shape `(n_cells, n_classes)`.
-                If `soft=False`, returns class predictions with shape `(n_cells,)`.
-                If `return_numpy=True`, returns numpy array, otherwise torch tensor.
-            If `interpretability` in ["ig", "gs"]:
-                If `return_dict=True` (default): Returns dict with keys:
-                    - "predictions": Model predictions (same format as above)
-                    - "attributions": Feature attributions array with shape `(n_cells, n_genes)`
-                If `return_dict=False`: Returns tuple (predictions, attributions) for backward compatibility
+            If ``interpretability`` is ``None``: returns class probabilities with
+            shape ``(n_cells, n_classes)`` when ``soft=True``, otherwise class
+            predictions with shape ``(n_cells,)``. A numpy array is returned when
+            ``return_numpy=True``, else a torch tensor.
+
+            If ``interpretability`` is ``"ig"`` or ``"gs"``: with
+            ``return_dict=True`` (default) returns a dict with keys
+            ``"predictions"`` (as above) and ``"attributions"`` (feature
+            attributions of shape ``(n_cells, n_genes)``); with
+            ``return_dict=False`` returns a ``(predictions, attributions)`` tuple
+            for backward compatibility.
         """
         # Set model to eval mode
         if self.module.training:
@@ -1090,3 +1094,278 @@ class FADVI(
             df = df.head(top_n)
 
         return df
+
+    def evaluate_disentanglement(
+        self,
+        adata: AnnData | None = None,
+        batch_key: str | None = None,
+        labels_key: str | None = None,
+        compute_mi: bool = False
+    ) -> dict:
+        """
+        Comprehensive disentanglement quality evaluation.
+
+        Validates that FADVI achieves proper factor separation:
+        - z_batch should predict batch effects well (target: >0.8 accuracy)
+        - z_biological should predict cell types well (target: >0.8 accuracy)
+        - z_residual should be orthogonal and interpretable (not a signal sink)
+
+        Parameters
+        ----------
+        adata
+            AnnData object. If None, uses the one from setup.
+        batch_key
+            Key in adata.obs for batch information. If None, uses setup batch_key.
+        labels_key
+            Key in adata.obs for cell type labels. If None, uses setup labels_key.
+        compute_mi
+            Whether to compute mutual information (computationally expensive).
+
+        Returns
+        -------
+        Dict
+            Comprehensive disentanglement evaluation results including:
+            - batch_predictability: How well z_batch predicts batches
+            - biological_predictability: How well z_l predicts cell types
+            - cross_correlations: Correlations between subspaces (should be <0.3)
+            - orthogonality_scores: CCA-based orthogonality (higher is more orthogonal)
+            - residual_analysis: Whether z_r is interpretable or signal sink
+            - overall_quality: Summary assessment against the quality criteria
+        """
+        from ._disentanglement_metrics import evaluate_disentanglement_quality
+
+        adata = self._validate_anndata(adata)
+
+        # Use setup keys if not specified
+        if batch_key is None:
+            batch_key = self.summary_stats.get("setup_args", {}).get("batch_key", "batch")
+        if labels_key is None:
+            labels_key = self.summary_stats.get("setup_args", {}).get("labels_key", "cell_type")
+
+        # Get latent representations
+        print("Extracting latent representations...")
+        z_batch = self.get_latent_representation(adata, representation="b")
+        z_biological = self.get_latent_representation(adata, representation="l")
+        z_residual = self.get_latent_representation(adata, representation="r")
+
+        print(f"Latent shapes: z_b={z_batch.shape}, z_l={z_biological.shape}, z_r={z_residual.shape}")
+
+        # Comprehensive evaluation
+        results = evaluate_disentanglement_quality(
+            z_batch, z_biological, z_residual, adata, batch_key, labels_key
+        )
+
+        return results
+
+    def analyze_subspace_specificity(
+        self,
+        adata: AnnData | None = None,
+        batch_key: str | None = None,
+        labels_key: str | None = None
+    ) -> pd.DataFrame:
+        """
+        Validate that each subspace captures its intended variation.
+
+        Tests predictability of batch/label information from each latent subspace
+        to confirm proper disentanglement.
+
+        Parameters
+        ----------
+        adata
+            AnnData object. If None, uses the one from setup.
+        batch_key
+            Key for batch information in adata.obs
+        labels_key
+            Key for cell type labels in adata.obs
+
+        Returns
+        -------
+        pd.DataFrame
+            Specificity analysis with columns:
+            - subspace: Which latent subspace (z_b, z_l, z_r)
+            - target: What it should predict (batch, cell_type)
+            - accuracy: Prediction accuracy
+            - specificity_met: Whether it meets target (>0.8 for intended, <0.3 for unintended)
+        """
+        from ._disentanglement_metrics import evaluate_subspace_predictability
+
+        adata = self._validate_anndata(adata)
+
+        # Use setup keys if not specified
+        if batch_key is None:
+            batch_key = self.summary_stats.get("setup_args", {}).get("batch_key", "batch")
+        if labels_key is None:
+            labels_key = self.summary_stats.get("setup_args", {}).get("labels_key", "cell_type")
+
+        # Get latent representations
+        z_batch = self.get_latent_representation(adata, representation="b")
+        z_biological = self.get_latent_representation(adata, representation="l")
+        z_residual = self.get_latent_representation(adata, representation="r")
+
+        results = []
+
+        # Test each subspace against each target
+        subspaces = {"z_b": z_batch, "z_l": z_biological, "z_r": z_residual}
+        targets = {}
+
+        if batch_key in adata.obs:
+            targets["batch"] = adata.obs[batch_key]
+        if labels_key in adata.obs:
+            targets["cell_type"] = adata.obs[labels_key]
+        elif "annotation" in adata.obs:
+            targets["cell_type"] = adata.obs["annotation"]
+
+        for subspace_name, subspace_repr in subspaces.items():
+            for target_name, target_labels in targets.items():
+                pred_results = evaluate_subspace_predictability(subspace_repr, target_labels)
+                accuracy = pred_results["accuracy"]
+
+                # Determine if specificity is met
+                if (subspace_name == "z_b" and target_name == "batch") or \
+                   (subspace_name == "z_l" and target_name == "cell_type"):
+                    # Should have high accuracy for intended targets
+                    specificity_met = accuracy > 0.8
+                    expected = "high (>0.8)"
+                else:
+                    # Should have low accuracy for unintended targets
+                    specificity_met = accuracy < 0.3
+                    expected = "low (<0.3)"
+
+                results.append({
+                    "subspace": subspace_name,
+                    "target": target_name,
+                    "accuracy": accuracy,
+                    "expected": expected,
+                    "specificity_met": specificity_met,
+                    "n_classes": pred_results.get("n_classes", 0)
+                })
+
+        return pd.DataFrame(results)
+
+    def compute_orthogonality_scores(
+        self,
+        adata: AnnData | None = None,
+        method: str = "cca"
+    ) -> pd.DataFrame:
+        """
+        Quantify independence between latent factor subspaces.
+
+        Parameters
+        ----------
+        adata
+            AnnData object. If None, uses the one from setup.
+        method
+            Method for orthogonality computation ('cca' or 'cosine')
+
+        Returns
+        -------
+        pd.DataFrame
+            Orthogonality scores between all subspace pairs with columns:
+            - subspace_1, subspace_2: The compared subspaces
+            - orthogonality_score: Score from 0 (dependent) to 1 (orthogonal)
+            - max_canonical_correlation: Maximum canonical correlation (CCA method)
+        """
+        from ._disentanglement_metrics import compute_orthogonality_score
+
+        adata = self._validate_anndata(adata)
+
+        # Get latent representations
+        z_batch = self.get_latent_representation(adata, representation="b")
+        z_biological = self.get_latent_representation(adata, representation="l")
+        z_residual = self.get_latent_representation(adata, representation="r")
+
+        subspaces = {
+            "z_b": z_batch,
+            "z_l": z_biological,
+            "z_r": z_residual
+        }
+
+        results = []
+
+        # Compute pairwise orthogonality
+        pairs = [("z_b", "z_l"), ("z_b", "z_r"), ("z_l", "z_r")]
+
+        for subspace_1, subspace_2 in pairs:
+            repr_1 = subspaces[subspace_1]
+            repr_2 = subspaces[subspace_2]
+
+            orth_scores = compute_orthogonality_score(repr_1, repr_2, method=method)
+
+            results.append({
+                "subspace_1": subspace_1,
+                "subspace_2": subspace_2,
+                "orthogonality_score": orth_scores["orthogonality_score"],
+                "max_canonical_correlation": orth_scores.get("max_canonical_correlation", 0.0),
+                "mean_canonical_correlation": orth_scores.get("mean_canonical_correlation", 0.0),
+                "method": method
+            })
+
+        return pd.DataFrame(results)
+
+    def analyze_residual_interpretability(
+        self,
+        adata: AnnData | None = None,
+        n_top_genes: int = 100,
+        batch_key: str | None = None,
+        labels_key: str | None = None,
+    ) -> dict:
+        """
+        Assess whether the residual subspace acts as a signal sink.
+
+        Analyzes whether z_r captures meaningful orthogonal biological variation
+        or acts as an uncontrolled sink for leaked batch/biological signals.
+
+        Parameters
+        ----------
+        adata
+            AnnData object. If None, uses the one from setup.
+        n_top_genes
+            Number of top correlated genes to identify per residual factor.
+
+        Returns
+        -------
+        Dict
+            Analysis results including:
+            - batch_leakage_accuracy: How well z_r predicts batches (should be low)
+            - label_leakage_accuracy: How well z_r predicts cell types (should be low)
+            - biological_orthogonality: Orthogonality with z_l (should be high)
+            - batch_orthogonality: Orthogonality with z_b (should be high)
+            - mean_gene_correlation: Mean correlation with genes (should be moderate)
+            - residual_variance_fraction: Fraction of total variance in z_r
+            - interpretability_score: Overall interpretability (0-1)
+            - is_signal_sink: Boolean assessment if z_r is problematic
+            - top_correlated_genes: Most correlated genes per residual factor
+        """
+        from ._disentanglement_metrics import analyze_residual_interpretability
+
+        adata = self._validate_anndata(adata)
+
+        # Get latent representations
+        z_batch = self.get_latent_representation(adata, representation="b")
+        z_biological = self.get_latent_representation(adata, representation="l")
+        z_residual = self.get_latent_representation(adata, representation="r")
+
+        # Resolve the obs column names from the setup registry when the caller
+        # does not supply them. Without this the leakage test falls back to
+        # guessing column names, and silently skips the batch test on datasets
+        # whose batch variable is not literally called "batch" (e.g. spatial
+        # data, where it is "method").
+        if batch_key is None or labels_key is None:
+            try:
+                fr = self.adata_manager.registry["field_registries"]
+                if batch_key is None:
+                    batch_key = (fr["batch"]["state_registry"]
+                                 .get("original_key"))
+                if labels_key is None:
+                    labels_key = (fr["labels"]["state_registry"]
+                                  .get("original_key"))
+            except Exception:
+                pass  # fall back to the candidate lists in the metric function
+
+        # Comprehensive residual analysis
+        results = analyze_residual_interpretability(
+            z_residual, z_biological, z_batch, adata, n_top_genes,
+            batch_key=batch_key, labels_key=labels_key
+        )
+
+        return results
